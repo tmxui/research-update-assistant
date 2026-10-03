@@ -1,4 +1,4 @@
-"""Deutsche Benutzeroberfläche für Phase 0."""
+"""Deutsche Startseite; die Finanzlogik liegt in separaten Fachmodulen."""
 
 import streamlit as st
 
@@ -11,4 +11,4 @@ def render_home_page() -> None:
         "Diese Anwendung unterstützt bei der strukturierten Auswertung "
         "von Unternehmensresultaten."
     )
-    st.info("Aktueller Entwicklungsstand: Phase 0 – Projektgrundlage")
+    st.info("Aktueller Entwicklungsstand: Phase 1 – Finanzdatenmodell und Berechnungslogik")

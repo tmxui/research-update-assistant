@@ -1,0 +1,74 @@
+[
+  {
+    "company_name": "Synthetic Industrial AG",
+    "period_label": "FY2023",
+    "period_end": "2023-12-31",
+    "period_months": 12,
+    "currency": "CHF",
+    "scale": "million",
+    "revenue": 920,
+    "ebitda": 190,
+    "ebit": 145,
+    "net_income": 95,
+    "operating_cash_flow": 150,
+    "capex": 55,
+    "cash": 95,
+    "gross_debt": 280,
+    "inventory": 140,
+    "receivables": 110,
+    "payables": 95,
+    "source": {
+      "source_document": "synthetic_annual_report_2024.pdf",
+      "source_document_period": "FY2024",
+      "reported_as_comparative": true
+    }
+  },
+  {
+    "company_name": "Synthetic Industrial AG",
+    "period_label": "FY2024",
+    "period_end": "2024-12-31",
+    "period_months": 12,
+    "currency": "CHF",
+    "scale": "million",
+    "revenue": 1000,
+    "ebitda": 200,
+    "ebit": 150,
+    "net_income": 100,
+    "operating_cash_flow": 160,
+    "capex": 60,
+    "cash": 100,
+    "gross_debt": 300,
+    "inventory": 150,
+    "receivables": 120,
+    "payables": 100,
+    "source": {
+      "source_document": "synthetic_annual_report_2025.pdf",
+      "source_document_period": "FY2025",
+      "reported_as_comparative": true
+    }
+  },
+  {
+    "company_name": "Synthetic Industrial AG",
+    "period_label": "FY2025",
+    "period_end": "2025-12-31",
+    "period_months": 12,
+    "currency": "CHF",
+    "scale": "million",
+    "revenue": 1100,
+    "ebitda": 210,
+    "ebit": 143,
+    "net_income": 92,
+    "operating_cash_flow": 140,
+    "capex": 80,
+    "cash": 90,
+    "gross_debt": 360,
+    "inventory": 190,
+    "receivables": 150,
+    "payables": 110,
+    "source": {
+      "source_document": "synthetic_annual_report_2025.pdf",
+      "source_document_period": "FY2025",
+      "reported_as_comparative": false
+    }
+  }
+]

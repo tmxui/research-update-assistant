@@ -16,5 +16,5 @@ def test_app_starts_with_german_content() -> None:
         "von Unternehmensresultaten."
     )
     assert app.info[0].value == (
-        "Aktueller Entwicklungsstand: Phase 0 – Projektgrundlage"
+        "Aktueller Entwicklungsstand: Phase 1 – Finanzdatenmodell und Berechnungslogik"
     )
