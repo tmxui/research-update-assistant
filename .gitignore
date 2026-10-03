@@ -1,0 +1,27 @@
+# Virtuelle Python-Umgebungen
+.venv/
+venv/
+
+# Generierte Python-Dateien und Testergebnisse
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+
+# Zugangsdaten und lokale Konfiguration
+.env
+.env.*
+.streamlit/secrets.toml
+
+# Ausschliesslich lokale Daten; niemals vertrauliche Inhalte einchecken
+private_data/
+local_data/
+
+# Lokale Editor- und Betriebssystemdateien
+.vscode/
+.idea/
+.DS_Store
