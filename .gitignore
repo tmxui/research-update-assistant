@@ -25,3 +25,7 @@ local_data/
 .vscode/
 .idea/
 .DS_Store
+
+# Lokale Agent-Skills mit Verknüpfungen zur virtuellen Umgebung
+.claude/
+.agents/skills/
