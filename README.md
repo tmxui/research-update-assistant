@@ -11,13 +11,15 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 4 – Analyst-Dashboard und Trendanalyse:** Die deutsche Streamlit-Oberfläche erfasst
+**Phase 5A – PDF-Dokumentanalyse:** PDFs können lokal hochgeladen, seitenweise
+ausgelesen und durchsucht werden. Roh-Tabellen behalten ihre Seitenherkunft.
+Der unabhängige manuelle Workflow erfasst weiterhin
 zwei oder drei Perioden und zeigt eine chronologische Finanzübersicht sowie
 aufeinanderfolgende Periodenvergleiche. Eine unabhängige Regel-Engine erzeugt
 transparente Research-Prüfpunkte aus den bestehenden Phase-1-Berechnungen.
 Fünf Kennzahlenkarten und Plotly-Diagramme machen die vorhandenen Daten sichtbar.
-PDF-Verarbeitung, Uploads, Consensus, Excel-Export und Machine Learning
-sind noch nicht implementiert.
+Automatische Finanzkennzahlen-Zuordnung aus PDFs, OCR, Consensus, Excel-Export
+und Machine Learning sind noch nicht implementiert.
 
 ## Installation und Start (macOS / VS-Code-Terminal)
 
@@ -42,7 +44,7 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-4-Hinweis sowie das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
+Phase-5A-Hinweis, den PDF-Uploader und das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
 `.venv` enthält die Python-Pakete nur für dieses Projekt. Durch die Aktivierung
@@ -60,11 +62,55 @@ python -m pip check
 git status
 ```
 
-Die Tests prüfen Diagrammdaten und Kennzahlenkarten, die Research-Regeln und YAML-Validierung, den Formularablauf, Schweizer Zahlenformate, den App-Start,
+Die Tests prüfen synthetische PDFs, Seitenherkunft, Roh-Tabellen, Textsuche und
+PDF-Fehler sowie Diagrammdaten und Kennzahlenkarten, die Research-Regeln und YAML-Validierung, den Formularablauf, Schweizer Zahlenformate, den App-Start,
 die Formeln, fehlende Werte, Einheiten, Halbjahres-Leverage und die Historie
 mit mehreren Quellen.
-Git und der GitHub-Remote sind eingerichtet. Phase-4-Änderungen werden
+Git und der GitHub-Remote sind eingerichtet. Phase-5A-Änderungen werden
 erst nach gemeinsamer Prüfung committet und gepusht.
+
+## PDF-Dokumentanalyse in Phase 5A
+
+Unter **Geschäftsbericht einlesen** kannst du ein PDF hochladen. PyMuPDF liest
+Text und Dokumentinformationen; pdfplumber versucht, Tabellen mit seiner
+Standarderkennung zu finden. Die Übersicht nennt Seiten, Textseiten, erkannte
+Tabellen und eine technische Qualitätskategorie. **Ein Upload startet keine
+Finanzanalyse und erzeugt keine FinancialPeriod-Objekte.**
+
+Im **Seitenbrowser** wählst du eine physische PDF-Seite (erste Seite = 1).
+Gedruckte Seitenzahlen können davon abweichen. Der extrahierte Text bleibt mit
+Zeilenumbrüchen und Unicode-Zeichen erhalten. Tabellen speichern rohe Strings
+oder fehlende Zellen, Seitennummer, Tabellenindex und Position in PDF-Punkten.
+Die erste Tabellenzeile wird nicht automatisch als Header interpretiert.
+Nicht erkannte Tabellen werden nicht als Beweis für ihre Abwesenheit behandelt;
+komplexe Layouts und Texte ohne Zeichencodierung können unvollständig ausgelesen werden.
+
+**Dokument durchsuchen** sucht wörtlich und ohne Beachtung der Gross-/Kleinschreibung
+im Seitentext. Pro Trefferseite erscheinen die Anzahl Treffer und ein kurzer
+Originaltext-Ausschnitt um den ersten Treffer. Mit **PDF-Seite … anzeigen**
+wechselst du zur Quelle. Es gibt kein Fuzzy Matching oder fachliches Metric Mapping.
+
+Die Diagnose verwendet eine transparente Heuristik: Weniger als 40
+Nicht-Leerzeichen gelten als textarme Seite. Mindestens 80 % textarme Seiten
+und weniger als 80 Zeichen pro Seite im Mittel ergeben **möglicherweise gescannt**.
+Mindestens 25 % textarme Seiten, weniger als 200 Zeichen im Mittel oder
+Parser-Warnungen ergeben **eingeschränkt**; andernfalls erscheint **gut**.
+Auch kurze, leere oder teilweise nicht lesbare PDFs können Scan-Verdacht auslösen.
+Die Kategorie bestätigt weder einen Scan noch die Richtigkeit von Finanzzahlen.
+Gescannte PDFs werden aktuell **nicht per OCR** verarbeitet.
+
+Bytes und Ergebnisse bleiben im Arbeitsspeicher der lokalen App und der
+jeweiligen Browser-Sitzung. Hochgeladene PDFs werden nicht dauerhaft gespeichert
+oder automatisch in Git abgelegt. Die Extraktion erfolgt einmal je Upload;
+Suche und Seitenauswahl verwenden das vorhandene Ergebnis. Ein Dateiwechsel
+setzt den Dokumentbrowser zurück, lässt aber die manuelle Analyse bestehen.
+Passwortpflichtige, ungültige oder seitenlose PDFs zeigen verständliche Fehler.
+Einzelne Seiten-/Tabellenfehler erscheinen als Warnungen; andere Seiten bleiben verfügbar.
+
+Die automatisierten Tests erzeugen synthetische PDFs im Speicher und benötigen
+keine externen Geschäftsberichte. Der nächste gemeinsame Praxistest ist ein
+öffentliches Schweizer Geschäftsbericht-PDF: Seitenzahl, konkrete Textstellen,
+Tabellen und Suchtreffer mit dem Original vergleichen. Erst später folgt Phase 5B.
 
 ## Analyst-Dashboard und Trendanalyse in Phase 4
 
@@ -166,8 +212,8 @@ berechenbar. Nur die Anzeige wird gerundet. Die Eingaben und Ergebnisse bleiben
 ungerundet. Die Ergebnisse beziehen sich auf den letzten erfolgreichen Klick
 auf **Analyse berechnen**; nach Änderungen musst du erneut berechnen.
 
-Die manuelle Eingabe erzwingt keine PDF-Herkunft. Es wird kein Geschäftsbericht
-eingelesen. Daten und Ergebnisse bleiben in der jeweiligen Browser-Sitzung;
+Die manuelle Eingabe erzwingt keine PDF-Herkunft und übernimmt keine Werte aus
+dem separaten Dokumentbrowser. Daten und Ergebnisse bleiben in der jeweiligen Browser-Sitzung;
 eine dauerhafte Speicherung oder ein Export ist noch nicht enthalten.
 
 ## Fachliches Fundament in Phase 1
@@ -242,6 +288,9 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/calculations.py`: Formeln und Zwei-Perioden-Vergleich.
 - `src/research_update_assistant/history.py`: Chronologische Historie ohne Konfliktauflösung.
 - `src/research_update_assistant/ui.py`: Manuelles Formular, Analyst-Dashboard und Ergebnistabellen, ohne Finanzformeln.
+- `src/research_update_assistant/document_models.py`: Dokumente, Seiten, Roh-Tabellen und Suchtreffer.
+- `src/research_update_assistant/pdf_extractor.py`: Unabhängige PDF-Extraktion, Qualitätsdiagnose und Textsuche.
+- `src/research_update_assistant/pdf_ui.py`: PDF-Uploader, Dokumentübersicht und Seiten-/Suchbrowser.
 - `src/research_update_assistant/charts.py`: Unabhängige Plotly-Figures aus vorhandenen Periodenwerten und Kennzahlen.
 - `src/research_update_assistant/input_parsing.py`: Zahlen-Parsing, Eingabevalidierung und Periodenerstellung.
 - `src/research_update_assistant/formatting.py`: Anzeige von Beträgen, Prozentwerten, Multiplikatoren und Basispunkten.

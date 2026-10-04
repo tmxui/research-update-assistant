@@ -12,6 +12,8 @@ dependencies = [
     "streamlit>=1.65,<2",
     "PyYAML>=6,<7",
     "plotly>=6,<7",
+    "pymupdf>=1.24,<2",
+    "pdfplumber>=0.11,<0.12",
 ]
 
 [project.optional-dependencies]

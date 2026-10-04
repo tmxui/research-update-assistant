@@ -54,7 +54,7 @@ def test_app_starts_with_german_content() -> None:
     assert app.title[0].value == "Research Update Assistant"
     assert app.markdown[0].value == "Strukturierte Auswertung von Unternehmensresultaten"
     assert app.info[0].value == (
-        "Aktueller Entwicklungsstand: Phase 4 – Analyst-Dashboard und Trendanalyse"
+        "Aktueller Entwicklungsstand: Phase 5A – PDF-Dokumentanalyse"
     )
     assert [item.value for item in app.subheader] == [
         "1. Unternehmensdaten", "2. Finanzperioden erfassen", "3. Daten prüfen",
@@ -234,7 +234,7 @@ def test_research_flags_appear_only_after_analysis_and_show_latest_pair_first() 
     assert not app.exception
     assert not app.error
     assert [element.value for element in app.header] == [
-        "Research-Prüfpunkte", "Kennzahlenüberblick", "Finanzübersicht", "Trendanalyse", "Periodenvergleich",
+        "Geschäftsbericht einlesen", "Research-Prüfpunkte", "Kennzahlenüberblick", "Finanzübersicht", "Trendanalyse", "Periodenvergleich",
     ]
     assert [element.value for element in app.subheader][-2:] == ["FY2025 vs FY2024", "FY2024 vs FY2023"]
     result = app.session_state["analysis_result"]

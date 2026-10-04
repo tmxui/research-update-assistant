@@ -22,6 +22,7 @@ from .input_parsing import (
     InputValidationError, ManualPeriodInput, create_manual_history,
 )
 from .models import CalculatedPeriodMetrics, PeriodComparison
+from .pdf_ui import render_pdf_section
 from .sample_data import load_synthetic_history
 
 
@@ -357,7 +358,10 @@ def render_home_page() -> None:
     st.session_state.setdefault("scale", "million")
     st.title("Research Update Assistant")
     st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 4 – Analyst-Dashboard und Trendanalyse")
+    st.info("Aktueller Entwicklungsstand: Phase 5A – PDF-Dokumentanalyse")
+
+    render_pdf_section()
+    st.divider()
 
     st.subheader("1. Unternehmensdaten")
     count = st.selectbox(
