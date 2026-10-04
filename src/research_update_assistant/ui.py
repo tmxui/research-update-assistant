@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import streamlit as st
 
 from .calculations import PeriodCompatibilityError, calculate_period_metrics, compare_periods
+from .flag_config import FlagConfigError, load_flag_rules
+from .flags import ResearchFlag, generate_research_flags
 from .formatting import format_amount, format_basis_points, format_multiple, format_percentage
 from .history import FinancialHistory
 from .input_parsing import (
@@ -80,6 +82,8 @@ class AnalysisResult:
     history: FinancialHistory
     metrics: tuple[CalculatedPeriodMetrics, ...]
     comparisons: tuple[PeriodComparison, ...]
+    research_flags: tuple[tuple[ResearchFlag, ...], ...]
+    flag_error: str | None = None
 
 
 def _clear_analysis() -> None:
@@ -151,7 +155,17 @@ def _submit_analysis(
     except (InputValidationError, PeriodCompatibilityError) as error:
         st.error(str(error))
         return
-    st.session_state["analysis_result"] = AnalysisResult(history, metrics, comparisons)
+    flag_error = None
+    research_flags = ()
+    try:
+        rules = load_flag_rules()
+        research_flags = tuple(tuple(generate_research_flags(c, rules)) for c in comparisons)
+    except FlagConfigError as error:
+        # Finanzübersicht bleibt verfügbar; keine stillen Ersatzregeln.
+        flag_error = str(error)
+    st.session_state["analysis_result"] = AnalysisResult(
+        history, metrics, comparisons, research_flags, flag_error
+    )
 
 
 def _format_value(value: float | None, kind: str, *, signed: bool = False) -> str:
@@ -211,6 +225,49 @@ def _render_comparisons(result: AnalysisResult) -> None:
     )
 
 
+def _format_flag_threshold(flag: ResearchFlag) -> str:
+    if flag.threshold_unit == "bps":
+        value = f"{flag.threshold:.0f} bps"
+    elif flag.threshold_unit == "multiple":
+        value = f"{flag.threshold:.2f}x"
+    elif flag.threshold_unit == "percentage_points":
+        value = f"{flag.threshold * 100:.1f} Prozentpunkte"
+    else:
+        value = f"{flag.threshold:.1%}".replace("%", " %")
+    return f"{flag.threshold_operator} {value.replace('.', ',')}"
+
+
+def _render_research_flags(result: AnalysisResult) -> None:
+    """Zeige fertige Prüfpunkte mit Zahlen und Schwellen; keine Regelauswertung."""
+    st.header("Research-Prüfpunkte")
+    st.caption(
+        "Einzelne Auffälligkeiten zur Prüfung durch einen Analysten; keine Anlageempfehlungen. "
+        "Die Schwellenwerte sind generische Research-Heuristiken."
+    )
+    st.caption(
+        "Rot: deutliche Veränderung · Gelb: prüfen · Grün: Verbesserung. "
+        "Fehlende Kennzahlen lösen keine Regel aus."
+    )
+    if result.flag_error is not None:
+        st.error(f"Research-Prüfpunkte konnten nicht erstellt werden: {result.flag_error}")
+        return
+    labels = {"red": "Deutliche Veränderung", "yellow": "Prüfen", "green": "Verbesserung"}
+    pairs = tuple(zip(result.comparisons, result.research_flags))
+    for index, (comparison, flags) in reversed(tuple(enumerate(pairs))):
+        st.subheader(f"{comparison.current_period.period_label} vs {comparison.previous_period.period_label}")
+        if not flags:
+            st.caption("Für diesen Vergleich wurde keine Regel ausgelöst. Fehlende Kennzahlen werden nicht bewertet.")
+        for flag in flags:
+            with st.container(border=True, key=f"research_flag_{index}_{flag.rule_id}"):
+                st.badge(labels[flag.severity], color=flag.severity)
+                st.markdown(f"**{flag.title}**")
+                st.text(flag.message)
+                st.caption(
+                    f"{flag.category} · Regel: {flag.rule_id} · "
+                    f"Auslöseschwelle: {_format_flag_threshold(flag)}"
+                )
+
+
 def _render_results(result: AnalysisResult) -> None:
     first = result.history.periods[0]
     st.header("Finanzübersicht")
@@ -225,6 +282,7 @@ def _render_results(result: AnalysisResult) -> None:
     _render_comparisons(result)
     if any(period.period_months != 12 for period in result.history.periods):
         st.caption("Net Debt / EBITDA wird für Perioden ohne zwölf Monate nicht berechnet.")
+    _render_research_flags(result)
 
 
 def render_home_page() -> None:
@@ -234,7 +292,7 @@ def render_home_page() -> None:
     st.session_state.setdefault("scale", "million")
     st.title("Research Update Assistant")
     st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 2 – Manuelle Finanzanalyse")
+    st.info("Aktueller Entwicklungsstand: Phase 3 – Research-Prüfpunkte")
 
     st.subheader("1. Unternehmensdaten")
     count = st.selectbox(

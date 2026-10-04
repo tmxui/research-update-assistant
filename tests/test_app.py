@@ -1,12 +1,16 @@
 """Prüfe den kompletten manuellen Analysefluss mit Streamlit AppTest."""
 
 from pathlib import Path
+from dataclasses import replace
+from datetime import date
+import re
 from unittest.mock import Mock
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
 from research_update_assistant import ui
+from research_update_assistant.flag_config import FlagConfigError, RuleThresholds, load_flag_rules
 from research_update_assistant.input_parsing import FINANCIAL_INPUT_GROUPS
 from research_update_assistant.models import FinancialPeriod
 
@@ -49,7 +53,7 @@ def test_app_starts_with_german_content() -> None:
     assert app.title[0].value == "Research Update Assistant"
     assert app.markdown[0].value == "Strukturierte Auswertung von Unternehmensresultaten"
     assert app.info[0].value == (
-        "Aktueller Entwicklungsstand: Phase 2 – Manuelle Finanzanalyse"
+        "Aktueller Entwicklungsstand: Phase 3 – Research-Prüfpunkte"
     )
     assert [item.value for item in app.subheader] == [
         "1. Unternehmensdaten", "2. Finanzperioden erfassen", "3. Daten prüfen",
@@ -218,3 +222,118 @@ def test_period_count_change_invalidates_results_and_preserves_hidden_inputs() -
     app.selectbox(key="period_count").select(3).run()
     assert app.text_input(key="period_2_period_label").value == "FY2025"
     assert app.text_input(key="period_2_revenue").value == "1100"
+
+
+def test_research_flags_appear_only_after_analysis_and_show_latest_pair_first() -> None:
+    app = _example_app(3)
+    assert "Research-Prüfpunkte" not in [element.value for element in app.header]
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    assert not app.error
+    assert [element.value for element in app.header] == [
+        "Finanzübersicht", "Periodenvergleich", "Research-Prüfpunkte",
+    ]
+    assert [element.value for element in app.subheader][-2:] == ["FY2025 vs FY2024", "FY2024 vs FY2023"]
+    result = app.session_state["analysis_result"]
+    assert [(flag.rule_id, flag.severity) for flag in result.research_flags[1]] == [
+        ("ebit_margin_decline", "red"), ("free_cash_flow_decline", "red"),
+        ("ebit_growth_lag", "red"), ("inventory_growth_excess", "yellow"),
+        ("receivables_growth_excess", "yellow"),
+    ]
+    assert [(flag.rule_id, flag.severity) for flag in result.research_flags[0]] == [("ebit_growth_lag", "yellow")]
+    assert any(":red-badge[Deutliche Veränderung]" in element.value for element in app.markdown)
+    assert any(":yellow-badge[Prüfen]" in element.value for element in app.markdown)
+
+
+def test_flag_texts_explain_numbers_and_display_configured_thresholds() -> None:
+    app = _example_app()
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    texts = "\n".join(element.value for element in app.text)
+    assert "15,0 % auf 13,0 %" in texts
+    assert "200 Basispunkte" in texts
+    assert "CHF 100 Mio. auf CHF 60 Mio." in texts
+    assert "40,0 %" in texts
+    assert "26,7 %" in texts and "+16,7 Prozentpunkte" in texts
+    assert "25,0 %" in texts and "+15,0 Prozentpunkte" in texts
+    captions = "\n".join(element.value for element in app.caption)
+    assert "ebit_margin_decline · Auslöseschwelle: ≤ -200 bps" in captions
+    assert "free_cash_flow_decline · Auslöseschwelle: ≤ -40,0 %" in captions
+
+
+def test_research_text_has_no_investment_recommendation_or_overall_score() -> None:
+    app = _example_app(3)
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    text = "\n".join(
+        element.value for elements in (app.text, app.markdown, app.caption, app.header, app.subheader)
+        for element in elements
+    )
+    assert not re.search(r"\b(kaufen|verkaufen|buy|sell|hold|bullish|bearish|attraktiv|unattraktiv|score)\b", text, re.I)
+
+
+def test_green_observations_are_displayed_for_measured_improvements(periods) -> None:
+    app = _example_app()
+    _set_period(app, 0, periods["FY2024"])
+    current = replace(
+        periods["FY2024"], period_label="FY2025", period_end=date(2025, 12, 31),
+        ebit=160, operating_cash_flow=180, gross_debt=200,
+    )
+    _set_period(app, 1, current)
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    assert not app.error
+    flags = app.session_state["analysis_result"].research_flags[0]
+    assert {flag.rule_id for flag in flags} == {"ebit_margin_improvement", "free_cash_flow_improvement", "leverage_decrease"}
+    assert all(flag.severity == "green" for flag in flags)
+    assert any(":green-badge[Verbesserung]" in element.value for element in app.markdown)
+
+
+def test_missing_financial_values_are_not_classified_as_green_or_red() -> None:
+    app = _example_app()
+    for index in range(2):
+        for _, definitions in FINANCIAL_INPUT_GROUPS:
+            for name, _ in definitions:
+                app.text_input(key=f"period_{index}_{name}").set_value("")
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    assert not app.error
+    assert app.session_state["analysis_result"].research_flags == ((),)
+    assert any("keine Regel ausgelöst" in element.value for element in app.caption)
+    assert not any("-badge[" in element.value for element in app.markdown)
+
+
+def test_config_error_preserves_financial_tables_without_silent_fallback(monkeypatch) -> None:
+    def invalid_configuration():
+        raise FlagConfigError("Research-Konfiguration fehlt.")
+
+    monkeypatch.setattr(ui, "load_flag_rules", invalid_configuration)
+    app = _example_app()
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    assert len(app.table) == 2
+    assert _overview(app).loc["Berechneter Free Cashflow", "FY2025"] == "60"
+    assert "Research-Konfiguration fehlt" in app.error[0].value
+    assert app.session_state["analysis_result"].research_flags == ()
+    assert not app.text
+
+
+def test_config_is_reloaded_only_when_analysis_is_submitted(monkeypatch) -> None:
+    original = load_flag_rules()
+    modified = replace(original, ebit_margin_decline=RuleThresholds(-100, -250))
+    loader = Mock(return_value=original)
+    monkeypatch.setattr(ui, "load_flag_rules", loader)
+    app = _example_app()
+    assert loader.call_count == 0
+    app.button(key="calculate_analysis").click().run()
+    assert loader.call_count == 1
+    loader.return_value = modified
+    app.run()
+    assert loader.call_count == 1
+    flags = {flag.rule_id: flag for flag in app.session_state["analysis_result"].research_flags[0]}
+    assert flags["ebit_margin_decline"].severity == "red"
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    assert loader.call_count == 2
+    flags = {flag.rule_id: flag for flag in app.session_state["analysis_result"].research_flags[0]}
+    assert flags["ebit_margin_decline"].severity == "yellow"

@@ -11,11 +11,12 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 2 – Manuelle Finanzanalyse:** Die deutsche Streamlit-Oberfläche erfasst
+**Phase 3 – Research-Prüfpunkte:** Die deutsche Streamlit-Oberfläche erfasst
 zwei oder drei Perioden und zeigt eine chronologische Finanzübersicht sowie
-aufeinanderfolgende Periodenvergleiche. Sie verwendet die bestehenden
-Phase-1-Modelle und Berechnungen. PDF-Verarbeitung, Uploads, Diagramme,
-Research-Ampeln, Excel-Export und Machine Learning sind noch nicht implementiert.
+aufeinanderfolgende Periodenvergleiche. Eine unabhängige Regel-Engine erzeugt
+transparente Research-Prüfpunkte aus den bestehenden Phase-1-Berechnungen.
+PDF-Verarbeitung, Uploads, Diagramme, Consensus, Excel-Export und Machine Learning
+sind noch nicht implementiert.
 
 ## Installation und Start (macOS / VS-Code-Terminal)
 
@@ -40,7 +41,7 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-2-Hinweis sowie das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
+Phase-3-Hinweis sowie das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
 `.venv` enthält die Python-Pakete nur für dieses Projekt. Durch die Aktivierung
@@ -58,11 +59,51 @@ python -m pip check
 git status
 ```
 
-Die Tests prüfen den Formularablauf, Schweizer Zahlenformate, den App-Start,
+Die Tests prüfen die Research-Regeln und YAML-Validierung, den Formularablauf, Schweizer Zahlenformate, den App-Start,
 die Formeln, fehlende Werte, Einheiten, Halbjahres-Leverage und die Historie
 mit mehreren Quellen.
-Git und der GitHub-Remote sind eingerichtet. Phase-2-Änderungen werden
+Git und der GitHub-Remote sind eingerichtet. Phase-3-Änderungen werden
 erst nach gemeinsamer Prüfung committet und gepusht.
+
+## Research-Auffälligkeiten in Phase 3
+
+Nach **Analyse berechnen** erscheinen unter dem Periodenvergleich die
+**Research-Prüfpunkte**. Der jüngste Vergleich steht zuerst. Pro Vergleich
+werden rote Hinweise vor gelben und grünen angezeigt. Jeder Hinweis nennt
+die Kategorie, relevante Zahlen, Regel-ID und auslösende Schwelle.
+Rot bedeutet **deutliche Veränderung zur Prüfung**, Gelb **prüfen**, Grün
+**Verbesserung**. Es gibt keinen Gesamtscore und keine Anlageempfehlungen.
+Eine nicht ausgelöste Regel ist keine Aussage über die Qualität eines Unternehmens.
+
+Die Schwellen liegen in `config/flag_rules.yaml`. **Diese Schwellenwerte sind
+generische Research-Heuristiken und keine universell gültigen Investmentregeln.**
+Ein Prozentwert wie `-0.40` bedeutet −40 %. Margenschwellen stehen in Basispunkten,
+Leverage-Schwellen in Multiplikatoren. Rückgänge sind grundsätzlich inklusiv
+(`<=`), Anstiege ebenfalls (`>=`); nur die gelbe Umsatzregel ist strikt `< 0`.
+EBIT-Wachstumsspreads werden nur bei steigendem Umsatz geprüft.
+Die Cashflow-Divergenzregel verlangt für Gelb steigenden EBIT, für Rot genügt
+unveränderter EBIT bei einem OCF-Rückgang von mindestens 30 %.
+
+Fehlende Kennzahlen lösen keine Regel aus. FCF und Leverage verwenden
+ausschliesslich **calculated**-Werte. Es gibt keinen stillen Wechsel zu reported-
+oder adjusted-Werten. Leverage setzt zwölf Monate und positives EBITDA voraus;
+bei Halbjahresdaten erfolgt keine Annualisierung. Wachstumsbasierte Hinweise
+benötigen positive Ausgangswerte: Prozentwachstum aus negativem FCF oder
+Verlusten könnte sonst die tatsächliche Richtung falsch beschreiben.
+Margenregeln können auch negative Margen vergleichen.
+
+Die YAML-Datei wird sicher eingelesen und auf Vollständigkeit, eindeutige
+Schlüssel, endliche Zahlen und sinnvolle Schwellenreihenfolge geprüft.
+Bei einer fehlenden oder ungültigen Konfiguration zeigt die App einen
+verständlichen Fehler im Research-Bereich; Finanzübersicht und Vergleich bleiben
+verfügbar. Es werden keine Ersatzschwellen verwendet.
+
+Beispiel: In `ebit_margin_decline` ändert `red: -250` die rote Schwelle auf
+−250 Basispunkte. Danach **Analyse berechnen** erneut klicken; erst dann werden
+die Regeln neu eingelesen. Der bisherige Rückgang von −200 bps wäre nun gelb.
+Später kann `load_flag_rules(path)` beispielsweise getrennte Dateien für
+Industrie oder Healthcare laden. Die Engine und ihre Finanzformeln bleiben gleich;
+eine automatische Sektorauswahl ist noch nicht implementiert.
 
 ## Manuelle Analyse in Phase 2
 
@@ -171,7 +212,10 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/input_parsing.py`: Zahlen-Parsing, Eingabevalidierung und Periodenerstellung.
 - `src/research_update_assistant/formatting.py`: Anzeige von Beträgen, Prozentwerten, Multiplikatoren und Basispunkten.
 - `src/research_update_assistant/sample_data.py`: Gemeinsamer Loader der JSON-Beispiele für UI und Terminal.
-- `config/`: Platz für spätere Regeln und Finanzbegriffe.
+- `src/research_update_assistant/flags.py`: ResearchFlag-Dataclass und unabhängige Regel-Engine.
+- `src/research_update_assistant/flag_config.py`: Geprüfte Konfiguration und sicherer YAML-Loader.
+- `config/flag_rules.yaml`: Konfigurierbare Research-Schwellen.
+- `config/`: Regeln und Platz für spätere Finanzbegriffe.
 - `tests/`: Automatisierte Tests.
 - `sample_data/`: Nur öffentliche oder synthetische Beispieldaten.
 - `examples/`: Ausführbares Terminal-Beispiel für die drei synthetischen Jahre.

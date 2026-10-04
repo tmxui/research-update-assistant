@@ -1,0 +1,50 @@
+# Generische Research-Heuristiken, keine universell gültigen Investmentregeln.
+# Prozentwerte sind Dezimalzahlen. Margenschwellen sind Basispunkte.
+# Leverage-Schwellen sind Multiplikatoren. Keine automatische Annualisierung.
+schema_version: 1
+
+rules:
+  # Gelb: strikt unter yellow. Rot: kleiner/gleich red.
+  revenue_decline:
+    yellow: 0.0
+    red: -0.10
+
+  # Rückgänge und negative Wachstumsspreads: kleiner/gleich der Schwelle.
+  ebit_margin_decline:
+    yellow: -100
+    red: -200
+  ebitda_margin_decline:
+    yellow: -100
+    red: -200
+  free_cash_flow_decline:
+    yellow: -0.20
+    red: -0.40
+  ebit_growth_lag:
+    yellow: -0.05
+    red: -0.10
+
+  # Positive Wachstumsspreads und Leverage: grösser/gleich der Schwelle.
+  inventory_growth_excess:
+    yellow: 0.10
+    red: 0.20
+  receivables_growth_excess:
+    yellow: 0.10
+    red: 0.20
+  leverage_increase:
+    yellow: 0.5
+    red: 1.0
+  leverage_level:
+    yellow: 3.0
+    red: 4.0
+
+  # Gelb: EBIT-Wachstum > 0 und OCF-Wachstum < yellow.
+  # Rot: EBIT-Wachstum >= 0 und OCF-Wachstum <= red.
+  cashflow_ebit_divergence:
+    yellow: 0.0
+    red: -0.30
+
+# Drei separate positive Beobachtungen, jeweils grösser/gleich.
+positive:
+  ebit_margin_increase_bps: 100
+  free_cash_flow_growth: 0.20
+  leverage_decrease: 0.5
