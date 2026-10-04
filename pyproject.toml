@@ -9,7 +9,7 @@ description = "Lern- und Portfolio-Projekt zur strukturierten Auswertung von Unt
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "streamlit>=1.40,<2",
+    "streamlit>=1.65,<2",
 ]
 
 [project.optional-dependencies]

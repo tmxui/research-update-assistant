@@ -11,15 +11,16 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 1 – Finanzdatenmodell und Berechnungslogik:** Periodenwerte,
-chronologische Historie, Kennzahlen und Vergleiche sind als unabhängige
-Python-Module implementiert. Die Streamlit-App zeigt weiterhin nur eine
-deutsche Startseite. PDF-Verarbeitung, Eingabemasken, Dashboards und
-Machine Learning sind noch nicht implementiert.
+**Phase 2 – Manuelle Finanzanalyse:** Die deutsche Streamlit-Oberfläche erfasst
+zwei oder drei Perioden und zeigt eine chronologische Finanzübersicht sowie
+aufeinanderfolgende Periodenvergleiche. Sie verwendet die bestehenden
+Phase-1-Modelle und Berechnungen. PDF-Verarbeitung, Uploads, Diagramme,
+Research-Ampeln, Excel-Export und Machine Learning sind noch nicht implementiert.
 
 ## Installation und Start (macOS / VS-Code-Terminal)
 
-Voraussetzung: Python 3.11 oder neuer. Öffne diesen Projektordner in VS Code.
+Voraussetzung: Python 3.11 oder neuer und Streamlit ab 1.65 (wie in
+`pyproject.toml` definiert). Öffne diesen Projektordner in VS Code.
 Führe die folgenden Befehle im Terminal im Projektordner aus:
 
 ```bash
@@ -39,7 +40,7 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-1-Hinweis sehen. Beende den Server im Terminal mit `Ctrl+C`.
+Phase-2-Hinweis sowie das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
 `.venv` enthält die Python-Pakete nur für dieses Projekt. Durch die Aktivierung
@@ -57,10 +58,43 @@ python -m pip check
 git status
 ```
 
-Die Tests prüfen den App-Start, die Formeln, fehlende Werte, Einheiten,
-Halbjahres-Leverage und die Historie mit mehreren Quellen.
-Git und der GitHub-Remote sind eingerichtet. Phase-1-Änderungen werden
+Die Tests prüfen den Formularablauf, Schweizer Zahlenformate, den App-Start,
+die Formeln, fehlende Werte, Einheiten, Halbjahres-Leverage und die Historie
+mit mehreren Quellen.
+Git und der GitHub-Remote sind eingerichtet. Phase-2-Änderungen werden
 erst nach gemeinsamer Prüfung committet und gepusht.
+
+## Manuelle Analyse in Phase 2
+
+1. Wähle zuerst zwei oder drei Perioden. Mit **Synthetische Beispieldaten
+   verwenden** werden die vorhandenen JSON-Beispiele geladen: bei zwei Perioden
+   FY2024/FY2025, bei drei FY2023/FY2024/FY2025. Dieser Button berechnet noch nichts.
+2. Trage Unternehmen, Währung und Einheit ein. Erfasse in jedem Perioden-Tab
+   Bezeichnung, Stichtag, Monatsanzahl und die verfügbaren Finanzwerte.
+3. Prüfe deine Eingaben und klicke **Analyse berechnen**. Fehler werden auf
+   Deutsch angezeigt. Gleiche Labels und inkompatible Periodendauern verhindern
+   die Analyse; es gibt keine automatische Umrechnung oder Annualisierung.
+4. Die **Finanzübersicht** zeigt Beträge, Margen, Free Cashflow, Nettoverschuldung,
+   Leverage und Working-Capital-Kennzahlen. Der **Periodenvergleich** zeigt
+   Wachstum, Margenänderungen in Basispunkten und Leverage-Differenzen. Auch
+   unsortierte Eingaben werden durch `FinancialHistory` chronologisch angeordnet.
+
+Leere Finanzfelder ergeben `None`, nicht null. `0` bleibt ein echter Nullwert.
+Akzeptierte Formate sind beispielsweise `1100`, `1'100`, `1’100`, `1 100`,
+`1100.5`, `1100,5` und `1’100,5`. Punkt oder Komma ist ausschliesslich ein
+Dezimaltrenner; Tausendergruppen müssen vollständig sein. Mehrdeutige Mischformen
+wie `1.100,5` werden abgewiesen. Capex darf positiv oder negativ eingegeben werden;
+seine Normalisierung übernimmt ausschliesslich die bestehende Finanzlogik.
+
+Ausgewiesene und berechnete Werte werden getrennt angezeigt. Vollständig fehlende
+optionale Zeilen werden ausgeblendet; sonst bedeutet `–`: fehlend oder nicht
+berechenbar. Nur die Anzeige wird gerundet. Die Eingaben und Ergebnisse bleiben
+ungerundet. Die Ergebnisse beziehen sich auf den letzten erfolgreichen Klick
+auf **Analyse berechnen**; nach Änderungen musst du erneut berechnen.
+
+Die manuelle Eingabe erzwingt keine PDF-Herkunft. Es wird kein Geschäftsbericht
+eingelesen. Daten und Ergebnisse bleiben in der jeweiligen Browser-Sitzung;
+eine dauerhafte Speicherung oder ein Export ist noch nicht enthalten.
 
 ## Fachliches Fundament in Phase 1
 
@@ -133,7 +167,10 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/models.py`: Periodenwerte, Source-Metadaten und Ergebnis-Dataclasses.
 - `src/research_update_assistant/calculations.py`: Formeln und Zwei-Perioden-Vergleich.
 - `src/research_update_assistant/history.py`: Chronologische Historie ohne Konfliktauflösung.
-- `src/research_update_assistant/ui.py`: Streamlit-Startseite, ohne Finanzlogik.
+- `src/research_update_assistant/ui.py`: Manuelles Formular und Ergebnistabellen, ohne Finanzformeln.
+- `src/research_update_assistant/input_parsing.py`: Zahlen-Parsing, Eingabevalidierung und Periodenerstellung.
+- `src/research_update_assistant/formatting.py`: Anzeige von Beträgen, Prozentwerten, Multiplikatoren und Basispunkten.
+- `src/research_update_assistant/sample_data.py`: Gemeinsamer Loader der JSON-Beispiele für UI und Terminal.
 - `config/`: Platz für spätere Regeln und Finanzbegriffe.
 - `tests/`: Automatisierte Tests.
 - `sample_data/`: Nur öffentliche oder synthetische Beispieldaten.

@@ -1,14 +1,274 @@
-"""Deutsche Startseite; die Finanzlogik liegt in separaten Fachmodulen."""
+"""Manuelle Erfassung und Anzeige; alle Finanzformeln liegen im Finance-Kern."""
+
+from dataclasses import dataclass
 
 import streamlit as st
 
+from .calculations import PeriodCompatibilityError, calculate_period_metrics, compare_periods
+from .formatting import format_amount, format_basis_points, format_multiple, format_percentage
+from .history import FinancialHistory
+from .input_parsing import (
+    CURRENCIES, FINANCIAL_INPUT_GROUPS, SCALE_OPTIONS,
+    InputValidationError, ManualPeriodInput, create_manual_history,
+)
+from .models import CalculatedPeriodMetrics, PeriodComparison
+from .sample_data import load_synthetic_history
+
+
+# Nur Anzeigenamen, Feldzuordnung und Anzeigeformat; keine Finanzformeln.
+# Die letzte Spalte blendet optionale Zeilen aus, wenn alle Werte fehlen.
+_OVERVIEW_ROWS = (
+    ("Umsatz", "period", "revenue", "amount", False),
+    ("EBITDA", "period", "ebitda", "amount", False),
+    ("Bereinigtes EBITDA", "period", "adjusted_ebitda", "amount", True),
+    ("EBITDA-Marge", "metrics", "ebitda_margin", "percentage", False),
+    ("Bereinigte EBITDA-Marge", "metrics", "adjusted_ebitda_margin", "percentage", True),
+    ("EBIT", "period", "ebit", "amount", False),
+    ("Bereinigtes EBIT", "period", "adjusted_ebit", "amount", True),
+    ("EBIT-Marge", "metrics", "ebit_margin", "percentage", False),
+    ("Bereinigte EBIT-Marge", "metrics", "adjusted_ebit_margin", "percentage", True),
+    ("Nettoergebnis", "period", "net_income", "amount", False),
+    ("Nettoergebnis-Marge", "metrics", "net_income_margin", "percentage", False),
+    ("Geldfluss aus Geschäftstätigkeit", "period", "operating_cash_flow", "amount", False),
+    ("Investitionen (Capex, normalisiert)", "metrics", "normalized_capex", "amount", False),
+    ("Ausgewiesener Free Cashflow", "period", "reported_free_cash_flow", "amount", True),
+    ("Berechneter Free Cashflow", "metrics", "calculated_free_cash_flow", "amount", False),
+    ("Ausgewiesene FCF-Marge", "metrics", "reported_free_cash_flow_margin", "percentage", True),
+    ("Berechnete FCF-Marge", "metrics", "calculated_free_cash_flow_margin", "percentage", False),
+    ("Geldfluss / EBITDA", "metrics", "operating_cash_flow_to_ebitda", "multiple", False),
+    ("Berechneter FCF / Nettoergebnis", "metrics", "calculated_free_cash_flow_to_net_income", "multiple", False),
+    ("Flüssige Mittel", "period", "cash", "amount", False),
+    ("Finanzschulden", "period", "gross_debt", "amount", False),
+    ("Ausgewiesene Nettoverschuldung", "period", "reported_net_debt", "amount", True),
+    ("Berechnete Nettoverschuldung", "metrics", "calculated_net_debt", "amount", False),
+    ("Ausgewiesene Nettoverschuldung / EBITDA", "metrics", "reported_net_debt_to_ebitda", "multiple", True),
+    ("Berechnete Nettoverschuldung / EBITDA", "metrics", "calculated_net_debt_to_ebitda", "multiple", False),
+    ("Vorräte", "period", "inventory", "amount", False),
+    ("Forderungen aus Lieferungen und Leistungen", "period", "receivables", "amount", False),
+    ("Verbindlichkeiten aus Lieferungen und Leistungen", "period", "payables", "amount", False),
+    ("Berechnetes operatives Working Capital", "metrics", "calculated_operating_working_capital", "amount", False),
+    ("Operatives Working Capital / Umsatz", "metrics", "operating_working_capital_to_revenue", "percentage", False),
+    ("Vorräte / Umsatz", "metrics", "inventory_to_revenue", "percentage", False),
+    ("Forderungen / Umsatz", "metrics", "receivables_to_revenue", "percentage", False),
+    ("Capex / Umsatz", "metrics", "capex_to_revenue", "percentage", False),
+    ("Bilanzsumme", "period", "total_assets", "amount", True),
+    ("Eigenkapital", "period", "equity", "amount", True),
+)
+_COMPARISON_ROWS = (
+    ("Umsatzwachstum", "revenue_growth", "percentage"),
+    ("EBITDA-Wachstum", "ebitda_growth", "percentage"),
+    ("EBIT-Wachstum", "ebit_growth", "percentage"),
+    ("Nettoergebnis-Wachstum", "net_income_growth", "percentage"),
+    ("Geldfluss-Wachstum", "operating_cash_flow_growth", "percentage"),
+    ("Berechnetes FCF-Wachstum", "calculated_free_cash_flow_growth", "percentage"),
+    ("Vorräte-Wachstum", "inventory_growth", "percentage"),
+    ("Forderungen-Wachstum", "receivables_growth", "percentage"),
+    ("Finanzschulden-Wachstum", "gross_debt_growth", "percentage"),
+    ("EBITDA-Margenänderung", "ebitda_margin_change_bps", "bps"),
+    ("EBIT-Margenänderung", "ebit_margin_change_bps", "bps"),
+    ("Nettoergebnis-Margenänderung", "net_income_margin_change_bps", "bps"),
+    ("Berechnete FCF-Margenänderung", "calculated_free_cash_flow_margin_change_bps", "bps"),
+    ("Berechnete Nettoverschuldung / EBITDA: Änderung", "calculated_net_debt_to_ebitda_change", "multiple"),
+    ("Ausgewiesene Nettoverschuldung / EBITDA: Änderung", "reported_net_debt_to_ebitda_change", "multiple"),
+)
+
+
+@dataclass(frozen=True)
+class AnalysisResult:
+    """Letzter erfolgreich bestätigter Stand dieser Browser-Sitzung."""
+
+    history: FinancialHistory
+    metrics: tuple[CalculatedPeriodMetrics, ...]
+    comparisons: tuple[PeriodComparison, ...]
+
+
+def _clear_analysis() -> None:
+    st.session_state["analysis_result"] = None
+
+
+def _prefill_examples() -> None:
+    """Fülle die gewählte Anzahl Felder, ohne die Analyse auszulösen."""
+    count = st.session_state["period_count"]
+    periods = load_synthetic_history().periods[-count:]
+    first = periods[0]
+    st.session_state["company_name"] = first.company_name
+    st.session_state["currency"] = first.currency
+    st.session_state["scale"] = first.scale
+    for index, period in enumerate(periods):
+        prefix = f"period_{index}_"
+        for name in ("period_label", "period_end", "period_months"):
+            st.session_state[prefix + name] = getattr(period, name)
+        for _, definitions in FINANCIAL_INPUT_GROUPS:
+            for name, _ in definitions:
+                value = getattr(period, name)
+                st.session_state[prefix + name] = "" if value is None else str(value)
+    _clear_analysis()
+
+
+def _render_period_input(index: int) -> ManualPeriodInput:
+    """Erfasse Metadaten und Zahlentexte, noch keine Finanzkennzahlen."""
+    prefix = f"period_{index}_"
+    label = st.text_input(
+        "Periodenbezeichnung", key=prefix + "period_label",
+        placeholder="z. B. FY2025", persist_state="session",
+    )
+    left, right = st.columns(2)
+    with left:
+        end = st.date_input(
+            "Stichtag", value=None, format="DD.MM.YYYY",
+            key=prefix + "period_end", persist_state="session",
+        )
+    with right:
+        st.session_state.setdefault(prefix + "period_months", 12)
+        months = st.number_input(
+            "Periodendauer in Monaten", min_value=1, value=None, step=1,
+            key=prefix + "period_months", persist_state="session",
+        )
+    values: dict[str, str] = {}
+    for group_label, definitions in FINANCIAL_INPUT_GROUPS:
+        st.markdown(f"**{group_label}**")
+        columns = st.columns(2)
+        for position, (name, display_label) in enumerate(definitions):
+            with columns[position % 2]:
+                values[name] = st.text_input(
+                    display_label, key=prefix + name, persist_state="session",
+                )
+    return ManualPeriodInput(label, end, months, values)
+
+
+def _submit_analysis(
+    company_name: str, currency: str, scale: str, raw_periods: list[ManualPeriodInput]
+) -> None:
+    """Validiere und delegiere die gesamte Finanzanalyse an die Phase-1-Funktionen."""
+    _clear_analysis()
+    try:
+        history = create_manual_history(company_name, currency, scale, raw_periods)
+        metrics = tuple(calculate_period_metrics(period) for period in history.periods)
+        comparisons = tuple(
+            compare_periods(current, previous)
+            for previous, current in zip(history.periods, history.periods[1:])
+        )
+    except (InputValidationError, PeriodCompatibilityError) as error:
+        st.error(str(error))
+        return
+    st.session_state["analysis_result"] = AnalysisResult(history, metrics, comparisons)
+
+
+def _format_value(value: float | None, kind: str, *, signed: bool = False) -> str:
+    if kind == "percentage":
+        return format_percentage(value, signed=signed)
+    if kind == "multiple":
+        return format_multiple(value, signed=signed)
+    if kind == "bps":
+        return format_basis_points(value)
+    return format_amount(value)
+
+
+def _table_data(labels: list[str], columns: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Ergänze Zeilenbeschriftungen, auch bei einer Periode namens 'Kennzahl'."""
+    label_column = "Kennzahl"
+    while label_column in columns:
+        label_column += " "
+    return {label_column: labels, **columns}
+
+
+def _render_overview(result: AnalysisResult) -> None:
+    """Zeige Eingabewerte und bereits berechnete Kennzahlen chronologisch."""
+    pairs = tuple(zip(result.history.periods, result.metrics))
+    rows = tuple(
+        row for row in _OVERVIEW_ROWS
+        if not row[4] or any(
+            getattr(period if row[1] == "period" else metrics, row[2]) is not None
+            for period, metrics in pairs
+        )
+    )
+    columns: dict[str, list[str]] = {}
+    for period, metrics in pairs:
+        columns[period.period_label] = [
+            _format_value(getattr(period if source == "period" else metrics, name), kind)
+            for _, source, name, kind, _ in rows
+        ]
+    st.table(
+        _table_data([row[0] for row in rows], columns),
+        hide_index=True, hide_header=False, border="horizontal",
+        alt="Finanzkennzahlen je Periode in chronologischer Reihenfolge",
+    )
+
+
+def _render_comparisons(result: AnalysisResult) -> None:
+    """Zeige ausschliesslich Felder der bestehenden PeriodComparison-Objekte."""
+    columns: dict[str, list[str]] = {}
+    for comparison in result.comparisons:
+        label = f"{comparison.current_period.period_label} vs {comparison.previous_period.period_label}"
+        columns[label] = [
+            _format_value(getattr(comparison, name), kind, signed=True)
+            for _, name, kind in _COMPARISON_ROWS
+        ]
+    st.table(
+        _table_data([row[0] for row in _COMPARISON_ROWS], columns),
+        hide_index=True, hide_header=False, border="horizontal",
+        alt="Wachstumsraten und Veränderungen aufeinanderfolgender Perioden",
+    )
+
+
+def _render_results(result: AnalysisResult) -> None:
+    first = result.history.periods[0]
+    st.header("Finanzübersicht")
+    st.caption(
+        f"{first.company_name} · {first.currency} · {dict(SCALE_OPTIONS)[first.scale]} · "
+        "Stand: zuletzt berechnete Eingaben. Änderungen mit ‚Analyse berechnen‘ übernehmen."
+    )
+    st.caption("– bedeutet: nicht verfügbar oder nicht berechenbar. Beträge sind in der gewählten Einheit.")
+    _render_overview(result)
+    st.header("Periodenvergleich")
+    st.caption("Margenänderungen in Basispunkten; Leverage-Änderungen als Differenz der Multiplikatoren.")
+    _render_comparisons(result)
+    if any(period.period_months != 12 for period in result.history.periods):
+        st.caption("Net Debt / EBITDA wird für Perioden ohne zwölf Monate nicht berechnet.")
+
 
 def render_home_page() -> None:
-    """Zeige die einfache Startseite ohne Finanzlogik."""
-    st.set_page_config(page_title="Research Update Assistant", page_icon="📊")
+    """Führe von manuellen Eingaben zur ausdrücklich ausgelösten Analyse."""
+    st.set_page_config(page_title="Research Update Assistant", page_icon="📊", layout="wide")
+    st.session_state.setdefault("analysis_result", None)
+    st.session_state.setdefault("scale", "million")
     st.title("Research Update Assistant")
-    st.write(
-        "Diese Anwendung unterstützt bei der strukturierten Auswertung "
-        "von Unternehmensresultaten."
+    st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
+    st.info("Aktueller Entwicklungsstand: Phase 2 – Manuelle Finanzanalyse")
+
+    st.subheader("1. Unternehmensdaten")
+    count = st.selectbox(
+        "Anzahl Perioden", (2, 3), key="period_count", on_change=_clear_analysis,
     )
-    st.info("Aktueller Entwicklungsstand: Phase 1 – Finanzdatenmodell und Berechnungslogik")
+    st.button("Synthetische Beispieldaten verwenden", key="load_examples", on_click=_prefill_examples)
+    st.caption("Wähle zuerst die Anzahl Perioden. Die Beispiele laden bei zwei Perioden FY2024/FY2025, bei drei alle Jahre.")
+
+    with st.form("manual_financial_analysis", enter_to_submit=False):
+        company_name = st.text_input("Unternehmensname", key="company_name", placeholder="z. B. Synthetic Industrial AG")
+        left, right = st.columns(2)
+        with left:
+            currency = st.selectbox("Währung", CURRENCIES, key="currency")
+        with right:
+            scale = st.selectbox(
+                "Einheit", tuple(value for value, _ in SCALE_OPTIONS), index=None,
+                format_func=lambda value: dict(SCALE_OPTIONS)[value], key="scale",
+            )
+        st.subheader("2. Finanzperioden erfassen")
+        st.caption("Leere Finanzfelder bleiben fehlend. 0 ist ein echter Nullwert. Tausendertrenner: Apostroph oder Leerzeichen; Dezimaltrenner: Punkt oder Komma.")
+        tabs = st.tabs([
+            st.session_state.get(f"period_{index}_period_label") or f"Periode {index + 1}"
+            for index in range(count)
+        ])
+        raw_periods: list[ManualPeriodInput] = []
+        for index, tab in enumerate(tabs):
+            with tab:
+                raw_periods.append(_render_period_input(index))
+        st.subheader("3. Daten prüfen")
+        st.caption("Prüfe Unternehmen, Einheit, Stichtage und Zahlen. Die Analyse startet erst mit dem folgenden Button.")
+        submitted = st.form_submit_button("Analyse berechnen", key="calculate_analysis")
+
+    if submitted:
+        _submit_analysis(company_name, currency, scale, raw_periods)
+    result = st.session_state["analysis_result"]
+    if result is not None:
+        _render_results(result)
