@@ -25,3 +25,19 @@ def format_multiple(value: float | None, *, signed: bool = False) -> str:
 def format_basis_points(value: float | None) -> str:
     """Zeige die bereits berechneten Basispunkte als vorzeichenbehaftete Zahl."""
     return "–" if value is None else f"{value:+.0f} bps"
+
+
+def _scale_suffix(scale: str) -> str:
+    return {"unit": "", "thousand": "Tsd.", "million": "Mio.", "billion": "Mrd."}.get(scale, scale)
+
+
+def format_currency_unit(currency: str, scale: str) -> str:
+    """Beschrifte eine Geldachse, ohne Beträge umzurechnen."""
+    return f"{currency} {_scale_suffix(scale)}".strip()
+
+
+def format_money(value: float | None, currency: str, scale: str) -> str:
+    """Zeige einen Betrag mit Währung und ursprünglicher Skalierung."""
+    if value is None:
+        return "–"
+    return f"{currency} {format_amount(value)} {_scale_suffix(scale)}".strip()

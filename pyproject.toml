@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
     "streamlit>=1.65,<2",
     "PyYAML>=6,<7",
+    "plotly>=6,<7",
 ]
 
 [project.optional-dependencies]

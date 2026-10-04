@@ -5,9 +5,17 @@ from dataclasses import dataclass
 import streamlit as st
 
 from .calculations import PeriodCompatibilityError, calculate_period_metrics, compare_periods
+from .charts import (
+    create_cashflow_chart, create_leverage_chart, create_margin_chart,
+    create_net_debt_chart, create_result_chart, create_revenue_chart,
+    create_working_capital_chart,
+)
 from .flag_config import FlagConfigError, load_flag_rules
 from .flags import ResearchFlag, generate_research_flags
-from .formatting import format_amount, format_basis_points, format_multiple, format_percentage
+from .formatting import (
+    format_amount, format_basis_points, format_currency_unit,
+    format_multiple, format_percentage,
+)
 from .history import FinancialHistory
 from .input_parsing import (
     CURRENCIES, FINANCIAL_INPUT_GROUPS, SCALE_OPTIONS,
@@ -268,8 +276,65 @@ def _render_research_flags(result: AnalysisResult) -> None:
                 )
 
 
+def _render_key_metrics(result: AnalysisResult) -> None:
+    """Fünf aktuelle Kennzahlen und vorhandene Vergleichswerte neutral anzeigen."""
+    period = result.history.periods[-1]
+    metrics = result.metrics[-1]
+    comparison = result.comparisons[-1]
+    st.header("Kennzahlenüberblick")
+    st.caption(
+        f"{period.period_label} · Geldbeträge in {format_currency_unit(period.currency, period.scale)} · "
+        f"Nettoverschuldung berechnet · Veränderung gegenüber {comparison.previous_period.period_label}"
+    )
+    definitions = (
+        ("Umsatz", format_amount(period.revenue), comparison.revenue_growth, "percentage"),
+        ("EBIT-Marge", format_percentage(metrics.ebit_margin), comparison.ebit_margin_change_bps, "bps"),
+        ("Berechneter FCF", format_amount(metrics.calculated_free_cash_flow), comparison.calculated_free_cash_flow_growth, "percentage"),
+        ("Nettoverschuldung", format_amount(metrics.calculated_net_debt), None, "amount"),
+        ("Net Debt / EBITDA", format_multiple(metrics.calculated_net_debt_to_ebitda), comparison.calculated_net_debt_to_ebitda_change, "multiple"),
+    )
+    with st.container(horizontal=True):
+        for label, value, change, kind in definitions:
+            delta = None if change is None else 0 if change == 0 else _format_value(change, kind, signed=True)
+            st.metric(label, value, delta, delta_color="off", delta_arrow="off", border=True, height="stretch")
+
+
+def _render_trend_analysis(result: AnalysisResult) -> None:
+    """Binde unabhängige Plotly-Figures ein; keine Finanzformeln in der Darstellung."""
+    history = result.history
+    metrics = dict(zip(history.periods, result.metrics, strict=True))
+    st.header("Trendanalyse")
+    st.caption("Erfasste Perioden in chronologischer Reihenfolge. Fehlende Werte werden nicht ergänzt.")
+    income, cashflow, balance, working_capital = st.tabs([
+        "Ergebnis & Margen", "Cashflow", "Bilanz & Verschuldung", "Working Capital",
+    ])
+    config = {"scrollZoom": False, "displaylogo": False}
+    with income:
+        st.caption("Umsatz separat, damit EBITDA und EBIT auf einer eigenen Betragsachse lesbar bleiben.")
+        left, right = st.columns(2)
+        with left:
+            st.plotly_chart(create_revenue_chart(history), key="chart_revenue", config=config, alt="Umsatz je erfasster Periode")
+        with right:
+            st.plotly_chart(create_result_chart(history), key="chart_result", config=config, alt="EBITDA und EBIT je erfasster Periode")
+        st.plotly_chart(create_margin_chart(history, metrics), key="chart_margins", config=config, alt="EBITDA- und EBIT-Marge über die erfassten Perioden")
+    with cashflow:
+        st.plotly_chart(create_cashflow_chart(history, metrics), key="chart_cashflow", config=config, alt="Geldfluss und getrennte Free-Cashflow-Werte über die Perioden")
+    with balance:
+        st.plotly_chart(create_net_debt_chart(history, metrics), key="chart_net_debt", config=config, alt="Berechnete und gegebenenfalls ausgewiesene Nettoverschuldung je Stichtag")
+        st.caption("Net Debt / EBITDA zeigt nur vorhandene Jahreswerte. Halbjahreswerte werden nicht annualisiert.")
+        st.plotly_chart(create_leverage_chart(history, metrics), key="chart_leverage", config=config, alt="Berechnete Nettoverschuldung im Verhältnis zum EBITDA für verfügbare Jahresperioden")
+    with working_capital:
+        st.plotly_chart(create_working_capital_chart(history, metrics), key="chart_working_capital", config=config, alt="Vorräte, Forderungen und operatives Working Capital im Verhältnis zum Umsatz")
+
+
 def _render_results(result: AnalysisResult) -> None:
     first = result.history.periods[0]
+    st.caption(
+        f"{first.company_name} · Stand: zuletzt berechnete Eingaben. "
+        "Änderungen mit ‚Analyse berechnen‘ übernehmen."
+    )
+    _render_research_flags(result)
+    _render_key_metrics(result)
     st.header("Finanzübersicht")
     st.caption(
         f"{first.company_name} · {first.currency} · {dict(SCALE_OPTIONS)[first.scale]} · "
@@ -277,12 +342,12 @@ def _render_results(result: AnalysisResult) -> None:
     )
     st.caption("– bedeutet: nicht verfügbar oder nicht berechenbar. Beträge sind in der gewählten Einheit.")
     _render_overview(result)
+    _render_trend_analysis(result)
     st.header("Periodenvergleich")
     st.caption("Margenänderungen in Basispunkten; Leverage-Änderungen als Differenz der Multiplikatoren.")
     _render_comparisons(result)
     if any(period.period_months != 12 for period in result.history.periods):
         st.caption("Net Debt / EBITDA wird für Perioden ohne zwölf Monate nicht berechnet.")
-    _render_research_flags(result)
 
 
 def render_home_page() -> None:
@@ -292,7 +357,7 @@ def render_home_page() -> None:
     st.session_state.setdefault("scale", "million")
     st.title("Research Update Assistant")
     st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 3 – Research-Prüfpunkte")
+    st.info("Aktueller Entwicklungsstand: Phase 4 – Analyst-Dashboard und Trendanalyse")
 
     st.subheader("1. Unternehmensdaten")
     count = st.selectbox(

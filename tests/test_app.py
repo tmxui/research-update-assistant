@@ -4,6 +4,7 @@ from pathlib import Path
 from dataclasses import replace
 from datetime import date
 import re
+import json
 from unittest.mock import Mock
 
 import pytest
@@ -53,7 +54,7 @@ def test_app_starts_with_german_content() -> None:
     assert app.title[0].value == "Research Update Assistant"
     assert app.markdown[0].value == "Strukturierte Auswertung von Unternehmensresultaten"
     assert app.info[0].value == (
-        "Aktueller Entwicklungsstand: Phase 3 – Research-Prüfpunkte"
+        "Aktueller Entwicklungsstand: Phase 4 – Analyst-Dashboard und Trendanalyse"
     )
     assert [item.value for item in app.subheader] == [
         "1. Unternehmensdaten", "2. Finanzperioden erfassen", "3. Daten prüfen",
@@ -121,6 +122,8 @@ def test_unordered_manual_periods_are_sorted(periods) -> None:
     assert not app.exception
     assert not app.error
     assert list(_overview(app).columns) == ["FY2023", "FY2024", "FY2025"]
+    assert app.metric[0].value == "1'100"
+    assert app.metric[1].value == "13.0 %"
     result = app.session_state["analysis_result"]
     assert all(period.source is None for period in result.history.periods)
     assert result.comparisons[1].ebit_margin_change_bps == pytest.approx(-200)
@@ -231,7 +234,7 @@ def test_research_flags_appear_only_after_analysis_and_show_latest_pair_first() 
     assert not app.exception
     assert not app.error
     assert [element.value for element in app.header] == [
-        "Finanzübersicht", "Periodenvergleich", "Research-Prüfpunkte",
+        "Research-Prüfpunkte", "Kennzahlenüberblick", "Finanzübersicht", "Trendanalyse", "Periodenvergleich",
     ]
     assert [element.value for element in app.subheader][-2:] == ["FY2025 vs FY2024", "FY2024 vs FY2023"]
     result = app.session_state["analysis_result"]
@@ -301,6 +304,11 @@ def test_missing_financial_values_are_not_classified_as_green_or_red() -> None:
     assert app.session_state["analysis_result"].research_flags == ((),)
     assert any("keine Regel ausgelöst" in element.value for element in app.caption)
     assert not any("-badge[" in element.value for element in app.markdown)
+    assert all(metric.value == "–" for metric in app.metric)
+    assert len(app.get("plotly_chart")) == 7
+    for element in app.get("plotly_chart"):
+        figure = json.loads(element.proto.spec)
+        assert "Keine verfügbaren Werte" in figure["layout"]["annotations"][0]["text"]
 
 
 def test_config_error_preserves_financial_tables_without_silent_fallback(monkeypatch) -> None:
@@ -337,3 +345,89 @@ def test_config_is_reloaded_only_when_analysis_is_submitted(monkeypatch) -> None
     assert loader.call_count == 2
     flags = {flag.rule_id: flag for flag in app.session_state["analysis_result"].research_flags[0]}
     assert flags["ebit_margin_decline"].severity == "yellow"
+
+
+def _chart_specs(app: AppTest) -> dict:
+    figures = [json.loads(element.proto.spec) for element in app.get("plotly_chart")]
+    return {figure["layout"]["title"]["text"]: figure for figure in figures}
+
+
+@pytest.mark.parametrize("count", [2, 3])
+def test_dashboard_has_five_latest_metrics_with_neutral_deltas(count) -> None:
+    app = _example_app(count)
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    assert not app.error
+    assert [(metric.label, metric.value, metric.delta) for metric in app.metric] == [
+        ("Umsatz", "1'100", "+10.0 %"), ("EBIT-Marge", "13.0 %", "-200 bps"),
+        ("Berechneter FCF", "60", "-40.0 %"), ("Nettoverschuldung", "270", ""),
+        ("Net Debt / EBITDA", "1.29x", "+0.29x"),
+    ]
+    assert all(metric.proto.color == metric.proto.GRAY for metric in app.metric)
+    assert all(metric.proto.direction == metric.proto.NONE for metric in app.metric)
+    assert any("Geldbeträge in CHF Mio." in caption.value for caption in app.caption)
+    assert [tab.label for tab in app.tabs][-4:] == [
+        "Ergebnis & Margen", "Cashflow", "Bilanz & Verschuldung", "Working Capital",
+    ]
+
+
+def test_dashboard_displays_expected_chart_data_after_analysis() -> None:
+    app = _example_app(3)
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    figures = _chart_specs(app)
+    assert set(figures) == {
+        "Umsatzentwicklung", "Ergebnisentwicklung", "Margenentwicklung", "Cashflow-Entwicklung",
+        "Nettoverschuldung", "Net Debt / EBITDA", "Working Capital im Verhältnis zum Umsatz",
+    }
+    assert figures["Umsatzentwicklung"]["data"][0]["x"] == ["FY2023", "FY2024", "FY2025"]
+    assert figures["Umsatzentwicklung"]["data"][0]["y"] == [920, 1000, 1100]
+    cashflow = {trace["name"]: trace for trace in figures["Cashflow-Entwicklung"]["data"]}
+    assert cashflow["Berechneter Free Cashflow"]["y"] == [95, 100, 60]
+    assert figures["Nettoverschuldung"]["data"][0]["y"] == [185, 200, 270]
+    assert all(element.proto.alt for element in app.get("plotly_chart"))
+
+
+def test_dashboard_survives_switch_between_two_and_three_periods() -> None:
+    app = _example_app()
+    for count in (2, 3, 2):
+        if app.selectbox(key="period_count").value != count:
+            app.selectbox(key="period_count").select(count).run()
+            assert not app.exception
+            assert not app.metric
+            assert not app.get("plotly_chart")
+            app.button(key="load_examples").click().run()
+        app.button(key="calculate_analysis").click().run()
+        assert not app.exception
+        assert not app.error
+        labels = _chart_specs(app)["Umsatzentwicklung"]["data"][0]["x"]
+        assert labels == (["FY2023", "FY2024", "FY2025"] if count == 3 else ["FY2024", "FY2025"])
+
+
+def test_dashboard_missing_fcf_and_leverage_do_not_crash_or_become_zero() -> None:
+    app = _example_app(3)
+    app.text_input(key="period_2_ebitda").set_value("")
+    app.text_input(key="period_2_capex").set_value("")
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    assert not app.error
+    assert app.metric[2].value == "–"
+    assert app.metric[4].value == "–"
+    figures = _chart_specs(app)
+    margins = {trace["name"]: trace for trace in figures["Margenentwicklung"]["data"]}
+    assert margins["EBITDA-Marge"]["y"][-1] is None
+    assert margins["EBITDA-Marge"]["connectgaps"] is False
+    cashflow = {trace["name"]: trace for trace in figures["Cashflow-Entwicklung"]["data"]}
+    assert cashflow["Berechneter Free Cashflow"]["y"][-1] is None
+    assert figures["Net Debt / EBITDA"]["data"][0]["x"] == ["FY2023", "FY2024"]
+
+
+def test_dashboard_zero_changes_remain_neutral(periods) -> None:
+    app = _example_app()
+    _set_period(app, 0, periods["FY2024"])
+    _set_period(app, 1, replace(periods["FY2024"], period_label="FY2025", period_end=date(2025, 12, 31)))
+    app.button(key="calculate_analysis").click().run()
+    assert not app.exception
+    assert [metric.delta for metric in app.metric] == ["0", "0", "0", "", "0"]
+    assert all(metric.proto.color == metric.proto.GRAY for metric in app.metric)
+    assert all(metric.proto.direction == metric.proto.NONE for metric in app.metric)

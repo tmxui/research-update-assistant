@@ -11,11 +11,12 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 3 – Research-Prüfpunkte:** Die deutsche Streamlit-Oberfläche erfasst
+**Phase 4 – Analyst-Dashboard und Trendanalyse:** Die deutsche Streamlit-Oberfläche erfasst
 zwei oder drei Perioden und zeigt eine chronologische Finanzübersicht sowie
 aufeinanderfolgende Periodenvergleiche. Eine unabhängige Regel-Engine erzeugt
 transparente Research-Prüfpunkte aus den bestehenden Phase-1-Berechnungen.
-PDF-Verarbeitung, Uploads, Diagramme, Consensus, Excel-Export und Machine Learning
+Fünf Kennzahlenkarten und Plotly-Diagramme machen die vorhandenen Daten sichtbar.
+PDF-Verarbeitung, Uploads, Consensus, Excel-Export und Machine Learning
 sind noch nicht implementiert.
 
 ## Installation und Start (macOS / VS-Code-Terminal)
@@ -41,7 +42,7 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-3-Hinweis sowie das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
+Phase-4-Hinweis sowie das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
 `.venv` enthält die Python-Pakete nur für dieses Projekt. Durch die Aktivierung
@@ -59,16 +60,48 @@ python -m pip check
 git status
 ```
 
-Die Tests prüfen die Research-Regeln und YAML-Validierung, den Formularablauf, Schweizer Zahlenformate, den App-Start,
+Die Tests prüfen Diagrammdaten und Kennzahlenkarten, die Research-Regeln und YAML-Validierung, den Formularablauf, Schweizer Zahlenformate, den App-Start,
 die Formeln, fehlende Werte, Einheiten, Halbjahres-Leverage und die Historie
 mit mehreren Quellen.
-Git und der GitHub-Remote sind eingerichtet. Phase-3-Änderungen werden
+Git und der GitHub-Remote sind eingerichtet. Phase-4-Änderungen werden
 erst nach gemeinsamer Prüfung committet und gepusht.
+
+## Analyst-Dashboard und Trendanalyse in Phase 4
+
+Nach **Analyse berechnen** folgen Research-Prüfpunkte, Kennzahlenüberblick,
+Finanzübersicht, Trendanalyse und Periodenvergleich. Die fünf Karten zeigen die
+neueste Periode: Umsatz, EBIT-Marge, berechneten FCF, berechnete Nettoverschuldung
+und Net Debt / EBITDA. Vorhandene Deltas kommen aus `PeriodComparison` und sind
+neutral dargestellt. Die Research-Prüfpunkte bleiben einzelne Prüfanlässe,
+keine Investment-Empfehlungen.
+
+Die Trendanalyse besitzt vier Tabs:
+
+| Tab | Diagramme und Research-Frage |
+| --- | --- |
+| Ergebnis & Margen | Umsatz separat sowie EBITDA/EBIT gemeinsam: Wie entwickeln sich Geschäft und Ergebnis? Margenlinien: Wie verändert sich die Profitabilität relativ zum Umsatz? |
+| Cashflow | Geldfluss und berechneter FCF: Wie entwickelt sich die Cashflow-Erzeugung? Ein vorhandener ausgewiesener FCF bleibt eine separate Reihe. |
+| Bilanz & Verschuldung | Nettoverschuldung und Net Debt / EBITDA: Wie entwickeln sich Schulden nach Abzug der flüssigen Mittel und das Verhältnis zum Jahres-EBITDA? |
+| Working Capital | Vorräte, Forderungen und operatives Working Capital relativ zum Umsatz: Wie verändert sich die Kapitalbindung relativ zum Geschäft? |
+
+Umsatz und Ergebnis verwenden getrennte Betragsachsen statt einer Doppelachse,
+damit kleinere Ergebniswerte lesbar bleiben. Geldachsen und Hover-Texte nennen
+Währung und Einheit. Prozentachsen verwenden unveränderte Dezimalquoten.
+Die Charts zeigen zwei oder drei erfasste Perioden, ohne darüber hinausgehende
+Trends oder Prognosen zu behaupten.
+
+`FinancialHistory` liefert die chronologische Reihenfolge. Bereits berechnete
+`CalculatedPeriodMetrics` werden ihrem jeweiligen Periodenobjekt zugeordnet;
+die Chart-Funktionen geben Plotly-Figures zurück. **Charts berechnen keine
+Finanzkennzahlen selbst.** `None` bleibt fehlend: Linien haben Lücken, fehlende
+Balken werden nicht als null dargestellt. Leverage enthält nur vorhandene
+Jahreswerte; bei komplett fehlenden Daten erscheint ein sachlicher Hinweis.
+Nullwerte bleiben echte Nullwerte. Nur Anzeigen und Hover-Texte werden gerundet.
 
 ## Research-Auffälligkeiten in Phase 3
 
-Nach **Analyse berechnen** erscheinen unter dem Periodenvergleich die
-**Research-Prüfpunkte**. Der jüngste Vergleich steht zuerst. Pro Vergleich
+Nach **Analyse berechnen** stehen die **Research-Prüfpunkte** am Anfang des
+Analysebereichs. Der jüngste Vergleich steht zuerst. Pro Vergleich
 werden rote Hinweise vor gelben und grünen angezeigt. Jeder Hinweis nennt
 die Kategorie, relevante Zahlen, Regel-ID und auslösende Schwelle.
 Rot bedeutet **deutliche Veränderung zur Prüfung**, Gelb **prüfen**, Grün
@@ -208,7 +241,8 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/models.py`: Periodenwerte, Source-Metadaten und Ergebnis-Dataclasses.
 - `src/research_update_assistant/calculations.py`: Formeln und Zwei-Perioden-Vergleich.
 - `src/research_update_assistant/history.py`: Chronologische Historie ohne Konfliktauflösung.
-- `src/research_update_assistant/ui.py`: Manuelles Formular und Ergebnistabellen, ohne Finanzformeln.
+- `src/research_update_assistant/ui.py`: Manuelles Formular, Analyst-Dashboard und Ergebnistabellen, ohne Finanzformeln.
+- `src/research_update_assistant/charts.py`: Unabhängige Plotly-Figures aus vorhandenen Periodenwerten und Kennzahlen.
 - `src/research_update_assistant/input_parsing.py`: Zahlen-Parsing, Eingabevalidierung und Periodenerstellung.
 - `src/research_update_assistant/formatting.py`: Anzeige von Beträgen, Prozentwerten, Multiplikatoren und Basispunkten.
 - `src/research_update_assistant/sample_data.py`: Gemeinsamer Loader der JSON-Beispiele für UI und Terminal.
