@@ -14,7 +14,7 @@ import pymupdf
 
 from .document_models import (
     LOW_TEXT_CHARACTER_THRESHOLD, DocumentSearchMatch, ExtractedDocument,
-    ExtractedPage, ExtractedTable, ExtractionQuality,
+    ExtractedPage, ExtractedTable, ExtractedWord, ExtractionQuality,
 )
 
 
@@ -71,6 +71,7 @@ def _extract_tables(pdf: pdfplumber.PDF | None, index: int) -> tuple[tuple[Extra
 
 def _extract_page(pdf: pymupdf.Document, table_pdf: pdfplumber.PDF | None, index: int) -> ExtractedPage:
     text, label = "", None
+    words: tuple[ExtractedWord, ...] = ()
     warnings: list[str] = []
     try:
         page = pdf.load_page(index)
@@ -79,11 +80,22 @@ def _extract_page(pdf: pymupdf.Document, table_pdf: pdfplumber.PDF | None, index
         warnings.append(f"PDF-Seite {index + 1}: Text konnte nicht gelesen werden.")
     else:
         try:
+            words = tuple(
+                ExtractedWord(
+                    text=str(word[4]), x0=word[0], y0=word[1],
+                    x1=word[2], y1=word[3], block_number=word[5],
+                    line_number=word[6], word_number=word[7],
+                )
+                for word in page.get_text("words", sort=False)
+            )
+        except Exception:
+            warnings.append(f"PDF-Seite {index + 1}: Wortpositionen konnten nicht gelesen werden.")
+        try:
             label = page.get_label() or None
         except Exception:
             warnings.append(f"PDF-Seite {index + 1}: Seitenlabel konnte nicht gelesen werden.")
     tables, table_warnings = _extract_tables(table_pdf, index)
-    return ExtractedPage(index + 1, text, tables, label, tuple(warnings + table_warnings))
+    return ExtractedPage(index + 1, text, tables, label, tuple(warnings + table_warnings), words)
 
 
 def _diagnose(pages: tuple[ExtractedPage, ...], warnings: list[str]) -> ExtractionQuality:

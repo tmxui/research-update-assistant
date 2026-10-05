@@ -6,12 +6,22 @@ import streamlit as st
 
 from .document_models import ExtractedDocument
 from .pdf_extractor import PdfExtractionError, extract_pdf_document, search_document
+from .financial_parser import extract_financial_metric_candidates
+from .metric_mapping import MetricConfigError, load_metric_config
+from .validation_ui import AcceptHistory, render_validation_section
 
 
 def _reset_document(signature: tuple[str, str] | None) -> None:
+    if st.session_state.get("analysis_source") == "pdf":
+        st.session_state["analysis_result"] = None
+    for key in list(st.session_state):
+        if key.startswith("review_"):
+            del st.session_state[key]
     st.session_state.update(
         pdf_signature=signature, pdf_document=None, pdf_error=None,
         pdf_page_number=1, pdf_search_query="",
+        pdf_candidates=(), pdf_metric_config=None, pdf_candidate_error=None,
+        pdf_ready_history=None, pdf_ready_observations=(), pdf_analysis_result=None,
     )
 
 
@@ -114,13 +124,13 @@ def _render_page_browser(document: ExtractedDocument) -> None:
             st.caption(f"Tabellenposition in PDF-Punkten (links, oben, rechts, unten): {table.bbox}")
 
 
-def render_pdf_section() -> None:
+def render_pdf_section(on_accept: AcceptHistory) -> None:
     """Extrahiere einmal je Upload, speichere nur in dieser Browser-Sitzung."""
     st.session_state.setdefault("pdf_signature", None)
     st.session_state.setdefault("pdf_document", None)
     st.session_state.setdefault("pdf_error", None)
     st.header("Geschäftsbericht einlesen")
-    st.caption("Technische Dokumentanalyse: Text und Tabellen durchsuchen. Es werden keine Finanzzahlen übernommen.")
+    st.caption("PDF-Vorschläge werden erst nach deiner Prüfung und Bestätigung in die Finanzanalyse übernommen.")
     uploaded = st.file_uploader(
         "Geschäfts- oder Ergebnisbericht als PDF hochladen", type=["pdf"], key="pdf_upload",
     )
@@ -137,6 +147,14 @@ def render_pdf_section() -> None:
                 st.session_state["pdf_document"] = extract_pdf_document(data, file_name=uploaded.name)
         except PdfExtractionError as error:
             st.session_state["pdf_error"] = str(error)
+        if st.session_state["pdf_document"] is not None:
+            try:
+                config = load_metric_config()
+                with st.spinner("Finanzstatements und Kennzahl-Kandidaten werden geprüft …"):
+                    st.session_state["pdf_candidates"] = extract_financial_metric_candidates(st.session_state["pdf_document"], config)
+                st.session_state["pdf_metric_config"] = config
+            except MetricConfigError as error:
+                st.session_state["pdf_candidate_error"] = str(error)
     if st.session_state["pdf_error"]:
         st.error(st.session_state["pdf_error"])
         return  # Der aufrufende manuelle Workflow läuft trotzdem weiter.
@@ -145,3 +163,7 @@ def render_pdf_section() -> None:
         _render_document_summary(document)
         _render_search(document)
         _render_page_browser(document)
+        if st.session_state.get("pdf_candidate_error"):
+            st.error(st.session_state["pdf_candidate_error"])
+        elif st.session_state.get("pdf_metric_config"):
+            render_validation_section(st.session_state["pdf_metric_config"], st.session_state["pdf_candidates"], _select_page, on_accept)

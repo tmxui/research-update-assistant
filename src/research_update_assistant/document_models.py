@@ -9,6 +9,25 @@ LOW_TEXT_CHARACTER_THRESHOLD = 40
 
 
 @dataclass(frozen=True)
+class ExtractedWord:
+    """Ein maschinenlesbares Wort und seine PDF-Koordinaten (Punkte).
+
+    Block-, Zeilen- und Wortnummern stammen unverändert von PyMuPDF. Die
+    spätere logische Zeilensortierung verwendet zusätzlich die Koordinaten.
+    """
+
+    text: str
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    block_number: int
+    line_number: int
+    word_number: int
+    font_size: float | None = None
+
+
+@dataclass(frozen=True)
 class ExtractedTable:
     """Rohzellen und Position einer Tabelle; Indizes sind 1-basiert."""
 
@@ -39,6 +58,7 @@ class ExtractedPage:
     tables: tuple[ExtractedTable, ...] = ()
     printed_page_label: str | None = None
     extraction_warnings: tuple[str, ...] = ()
+    words: tuple[ExtractedWord, ...] = ()
 
     @property
     def text_length(self) -> int:

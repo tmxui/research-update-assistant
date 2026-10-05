@@ -24,6 +24,7 @@ from .input_parsing import (
 from .models import CalculatedPeriodMetrics, PeriodComparison
 from .pdf_ui import render_pdf_section
 from .sample_data import load_synthetic_history
+from .validation import ConfirmedMetricObservation
 
 
 # Nur Anzeigenamen, Feldzuordnung und Anzeigeformat; keine Finanzformeln.
@@ -40,6 +41,8 @@ _OVERVIEW_ROWS = (
     ("Bereinigte EBIT-Marge", "metrics", "adjusted_ebit_margin", "percentage", True),
     ("Nettoergebnis", "period", "net_income", "amount", False),
     ("Nettoergebnis-Marge", "metrics", "net_income_margin", "percentage", False),
+    ("Unverwässertes Ergebnis je Aktie (Währung/Aktie)", "period", "basic_eps", "amount", True),
+    ("Verwässertes Ergebnis je Aktie (Währung/Aktie)", "period", "diluted_eps", "amount", True),
     ("Geldfluss aus Geschäftstätigkeit", "period", "operating_cash_flow", "amount", False),
     ("Investitionen (Capex, normalisiert)", "metrics", "normalized_capex", "amount", False),
     ("Ausgewiesener Free Cashflow", "period", "reported_free_cash_flow", "amount", True),
@@ -93,10 +96,14 @@ class AnalysisResult:
     comparisons: tuple[PeriodComparison, ...]
     research_flags: tuple[tuple[ResearchFlag, ...], ...]
     flag_error: str | None = None
+    observations: tuple[ConfirmedMetricObservation, ...] = ()
 
 
 def _clear_analysis() -> None:
-    st.session_state["analysis_result"] = None
+    """Verwerfe nur das manuelle Ergebnis; PDF-Prüfdaten bleiben erhalten."""
+    st.session_state["manual_analysis_result"] = None
+    if st.session_state.get("analysis_source") == "manual":
+        st.session_state["analysis_result"] = None
 
 
 def _prefill_examples() -> None:
@@ -154,8 +161,22 @@ def _submit_analysis(
 ) -> None:
     """Validiere und delegiere die gesamte Finanzanalyse an die Phase-1-Funktionen."""
     _clear_analysis()
+    st.session_state["analysis_result"] = None
+    st.session_state["analysis_source"] = "manual"
     try:
         history = create_manual_history(company_name, currency, scale, raw_periods)
+        result = _analyse_history(history)
+        st.session_state["manual_analysis_result"] = result
+        st.session_state["analysis_result"] = result
+    except (InputValidationError, PeriodCompatibilityError) as error:
+        st.error(str(error))
+
+
+def _analyse_history(
+    history: FinancialHistory, observations: tuple[ConfirmedMetricObservation, ...] = ()
+) -> AnalysisResult | None:
+    """Gemeinsame Analyse für manuelle und ausdrücklich bestätigte PDF-Daten."""
+    try:
         metrics = tuple(calculate_period_metrics(period) for period in history.periods)
         comparisons = tuple(
             compare_periods(current, previous)
@@ -163,7 +184,7 @@ def _submit_analysis(
         )
     except (InputValidationError, PeriodCompatibilityError) as error:
         st.error(str(error))
-        return
+        return None
     flag_error = None
     research_flags = ()
     try:
@@ -172,9 +193,46 @@ def _submit_analysis(
     except FlagConfigError as error:
         # Finanzübersicht bleibt verfügbar; keine stillen Ersatzregeln.
         flag_error = str(error)
-    st.session_state["analysis_result"] = AnalysisResult(
-        history, metrics, comparisons, research_flags, flag_error
+    return AnalysisResult(
+        history, metrics, comparisons, research_flags, flag_error, observations
     )
+
+
+def _prepare_pdf_analysis(
+    history: FinancialHistory, observations: tuple[ConfirmedMetricObservation, ...]
+) -> None:
+    """Bewahre bestätigte Prüfdaten, ohne die Analyse bereits auszulösen."""
+    st.session_state["pdf_ready_history"] = history
+    st.session_state["pdf_ready_observations"] = observations
+    st.session_state["pdf_analysis_result"] = None
+    if st.session_state.get("analysis_source") == "pdf":
+        st.session_state["analysis_result"] = None
+
+
+def _render_pdf_analysis() -> None:
+    history = st.session_state["pdf_ready_history"]
+    if history is None:
+        return
+    first = history.periods[0]
+    observations = st.session_state["pdf_ready_observations"]
+    with st.container(border=True):
+        st.subheader("PDF-Daten bereit für Analyse")
+        st.text(
+            f"Unternehmen: {first.company_name}\n"
+            f"Perioden: {' / '.join(p.period_label for p in history.periods)}\n"
+            f"Währung: {first.currency}\n"
+            f"Einheit: {dict(SCALE_OPTIONS)[first.scale]}\n"
+            f"Bestätigte Kennzahlen: {len({o.canonical_metric for o in observations})}"
+        )
+        st.caption("Die bestätigten Daten sind bereit. Eine erneute Eingabe im manuellen Tab ist nicht nötig.")
+        if st.button("Analyse aus bestätigten PDF-Daten starten", key="pdf_start_analysis", type="primary"):
+            result = _analyse_history(history, observations)
+            st.session_state["pdf_analysis_result"] = result
+            st.session_state["analysis_result"] = result
+            st.session_state["analysis_source"] = "pdf"
+    result = st.session_state["pdf_analysis_result"]
+    if result is not None:
+        _render_results(result, from_pdf=True)
 
 
 def _format_value(value: float | None, kind: str, *, signed: bool = False) -> str:
@@ -246,7 +304,7 @@ def _format_flag_threshold(flag: ResearchFlag) -> str:
     return f"{flag.threshold_operator} {value.replace('.', ',')}"
 
 
-def _render_research_flags(result: AnalysisResult) -> None:
+def _render_research_flags(result: AnalysisResult, *, key_prefix: str = "") -> None:
     """Zeige fertige Prüfpunkte mit Zahlen und Schwellen; keine Regelauswertung."""
     st.header("Research-Prüfpunkte")
     st.caption(
@@ -267,7 +325,7 @@ def _render_research_flags(result: AnalysisResult) -> None:
         if not flags:
             st.caption("Für diesen Vergleich wurde keine Regel ausgelöst. Fehlende Kennzahlen werden nicht bewertet.")
         for flag in flags:
-            with st.container(border=True, key=f"research_flag_{index}_{flag.rule_id}"):
+            with st.container(border=True, key=f"{key_prefix}research_flag_{index}_{flag.rule_id}"):
                 st.badge(labels[flag.severity], color=flag.severity)
                 st.markdown(f"**{flag.title}**")
                 st.text(flag.message)
@@ -300,7 +358,7 @@ def _render_key_metrics(result: AnalysisResult) -> None:
             st.metric(label, value, delta, delta_color="off", delta_arrow="off", border=True, height="stretch")
 
 
-def _render_trend_analysis(result: AnalysisResult) -> None:
+def _render_trend_analysis(result: AnalysisResult, *, key_prefix: str = "") -> None:
     """Binde unabhängige Plotly-Figures ein; keine Finanzformeln in der Darstellung."""
     history = result.history
     metrics = dict(zip(history.periods, result.metrics, strict=True))
@@ -308,42 +366,71 @@ def _render_trend_analysis(result: AnalysisResult) -> None:
     st.caption("Erfasste Perioden in chronologischer Reihenfolge. Fehlende Werte werden nicht ergänzt.")
     income, cashflow, balance, working_capital = st.tabs([
         "Ergebnis & Margen", "Cashflow", "Bilanz & Verschuldung", "Working Capital",
-    ])
+    ], key=f"{key_prefix}trend_tabs")
     config = {"scrollZoom": False, "displaylogo": False}
     with income:
         st.caption("Umsatz separat, damit EBITDA und EBIT auf einer eigenen Betragsachse lesbar bleiben.")
         left, right = st.columns(2)
         with left:
-            st.plotly_chart(create_revenue_chart(history), key="chart_revenue", config=config, alt="Umsatz je erfasster Periode")
+            st.plotly_chart(create_revenue_chart(history), key=f"{key_prefix}chart_revenue", config=config, alt="Umsatz je erfasster Periode")
         with right:
-            st.plotly_chart(create_result_chart(history), key="chart_result", config=config, alt="EBITDA und EBIT je erfasster Periode")
-        st.plotly_chart(create_margin_chart(history, metrics), key="chart_margins", config=config, alt="EBITDA- und EBIT-Marge über die erfassten Perioden")
+            st.plotly_chart(create_result_chart(history), key=f"{key_prefix}chart_result", config=config, alt="EBITDA und EBIT je erfasster Periode")
+        st.plotly_chart(create_margin_chart(history, metrics), key=f"{key_prefix}chart_margins", config=config, alt="EBITDA- und EBIT-Marge über die erfassten Perioden")
     with cashflow:
-        st.plotly_chart(create_cashflow_chart(history, metrics), key="chart_cashflow", config=config, alt="Geldfluss und getrennte Free-Cashflow-Werte über die Perioden")
+        st.plotly_chart(create_cashflow_chart(history, metrics), key=f"{key_prefix}chart_cashflow", config=config, alt="Geldfluss und getrennte Free-Cashflow-Werte über die Perioden")
     with balance:
-        st.plotly_chart(create_net_debt_chart(history, metrics), key="chart_net_debt", config=config, alt="Berechnete und gegebenenfalls ausgewiesene Nettoverschuldung je Stichtag")
+        st.plotly_chart(create_net_debt_chart(history, metrics), key=f"{key_prefix}chart_net_debt", config=config, alt="Berechnete und gegebenenfalls ausgewiesene Nettoverschuldung je Stichtag")
         st.caption("Net Debt / EBITDA zeigt nur vorhandene Jahreswerte. Halbjahreswerte werden nicht annualisiert.")
-        st.plotly_chart(create_leverage_chart(history, metrics), key="chart_leverage", config=config, alt="Berechnete Nettoverschuldung im Verhältnis zum EBITDA für verfügbare Jahresperioden")
+        st.plotly_chart(create_leverage_chart(history, metrics), key=f"{key_prefix}chart_leverage", config=config, alt="Berechnete Nettoverschuldung im Verhältnis zum EBITDA für verfügbare Jahresperioden")
     with working_capital:
-        st.plotly_chart(create_working_capital_chart(history, metrics), key="chart_working_capital", config=config, alt="Vorräte, Forderungen und operatives Working Capital im Verhältnis zum Umsatz")
+        st.plotly_chart(create_working_capital_chart(history, metrics), key=f"{key_prefix}chart_working_capital", config=config, alt="Vorräte, Forderungen und operatives Working Capital im Verhältnis zum Umsatz")
 
 
-def _render_results(result: AnalysisResult) -> None:
+def _render_results(result: AnalysisResult, *, from_pdf: bool = False) -> None:
     first = result.history.periods[0]
-    st.caption(
-        f"{first.company_name} · Stand: zuletzt berechnete Eingaben. "
-        "Änderungen mit ‚Analyse berechnen‘ übernehmen."
+    stand = (
+        "Stand: zuletzt analysierte PDF-Prüfdaten. Änderungen erneut übernehmen und die PDF-Analyse starten."
+        if from_pdf else
+        "Stand: zuletzt berechnete Eingaben. Änderungen mit ‚Analyse berechnen‘ übernehmen."
     )
-    _render_research_flags(result)
+    if result.observations:
+        st.caption("Analyse aus bestätigten PDF-/Prüfeingaben. Änderungen im Prüfbereich erst erneut übernehmen.")
+        with st.expander("Quellen und bestätigte Korrekturen"):
+            st.dataframe([
+                {
+                    "Kennzahl": item.canonical_metric,
+                    "Periode": item.period_label,
+                    "Extrahiert": item.original_value,
+                    "Rohwert": item.original_raw_value,
+                    "Bestätigt": item.confirmed_value,
+                    "Ursprüngliche Kennzahl": item.original_canonical_metric,
+                    "Ursprüngliche Periode": item.original_period_label,
+                    "Ursprüngliche Einheit": f"{item.original_currency or 'unbekannt'} / {item.original_scale or 'unbekannt'}",
+                    "Bestätigte Einheit": f"{item.currency} / {item.scale}",
+                    "Quelle": item.source_document or "Manuelle Ergänzung",
+                    "PDF-Seite": item.page_number,
+                    "Originalbezeichnung": item.reported_label,
+                    "Methode": item.extraction_method,
+                    "Quelltext": item.source_snippet,
+                    "Position": str(item.bbox) if item.bbox else None,
+                } for item in result.observations
+            ], hide_index=True, alt="Herkunft und Korrekturen der bestätigten Finanzwerte")
+    st.caption(
+        f"{first.company_name} · {stand}"
+    )
+    key_prefix = "pdf_" if from_pdf else ""
+    _render_research_flags(result, key_prefix=key_prefix)
     _render_key_metrics(result)
     st.header("Finanzübersicht")
     st.caption(
         f"{first.company_name} · {first.currency} · {dict(SCALE_OPTIONS)[first.scale]} · "
-        "Stand: zuletzt berechnete Eingaben. Änderungen mit ‚Analyse berechnen‘ übernehmen."
+        f"{stand}"
     )
     st.caption("– bedeutet: nicht verfügbar oder nicht berechenbar. Beträge sind in der gewählten Einheit.")
+    if any(p.basic_eps is not None or p.diluted_eps is not None for p in result.history.periods):
+        st.caption(f"EPS-Werte sind {first.currency} je Aktie; die Skalierung der übrigen Beträge gilt dafür nicht.")
     _render_overview(result)
-    _render_trend_analysis(result)
+    _render_trend_analysis(result, key_prefix=key_prefix)
     st.header("Periodenvergleich")
     st.caption("Margenänderungen in Basispunkten; Leverage-Änderungen als Differenz der Multiplikatoren.")
     _render_comparisons(result)
@@ -351,18 +438,8 @@ def _render_results(result: AnalysisResult) -> None:
         st.caption("Net Debt / EBITDA wird für Perioden ohne zwölf Monate nicht berechnet.")
 
 
-def render_home_page() -> None:
-    """Führe von manuellen Eingaben zur ausdrücklich ausgelösten Analyse."""
-    st.set_page_config(page_title="Research Update Assistant", page_icon="📊", layout="wide")
-    st.session_state.setdefault("analysis_result", None)
-    st.session_state.setdefault("scale", "million")
-    st.title("Research Update Assistant")
-    st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 5A – PDF-Dokumentanalyse")
-
-    render_pdf_section()
-    st.divider()
-
+def _render_manual_analysis() -> None:
+    """Behalte die manuelle Erfassung als eigenständigen Eingabeweg."""
     st.subheader("1. Unternehmensdaten")
     count = st.selectbox(
         "Anzahl Perioden", (2, 3), key="period_count", on_change=_clear_analysis,
@@ -396,6 +473,33 @@ def render_home_page() -> None:
 
     if submitted:
         _submit_analysis(company_name, currency, scale, raw_periods)
-    result = st.session_state["analysis_result"]
+    result = st.session_state["manual_analysis_result"]
     if result is not None:
         _render_results(result)
+
+
+def render_home_page() -> None:
+    """Zwei alternative Eingabewege führen zur selben Finanzanalyse."""
+    st.set_page_config(page_title="Research Update Assistant", page_icon="📊", layout="wide")
+    for key, value in (
+        ("analysis_result", None), ("analysis_source", None),
+        ("manual_analysis_result", None), ("pdf_ready_history", None),
+        ("pdf_ready_observations", ()), ("pdf_analysis_result", None),
+        ("scale", "million"),
+    ):
+        st.session_state.setdefault(key, value)
+    st.title("Research Update Assistant")
+    st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
+    st.info("Aktueller Entwicklungsstand: Phase 5B.2 – Getrennte Eingabewege und Kandidatenprüfung")
+    st.caption("Wähle einen Eingabeweg. PDF-Prüfung und manuelle Eingabe sind Alternativen und benötigen keine doppelte Erfassung.")
+    pdf_tab, manual_tab = st.tabs(
+        ["PDF-gestützte Analyse", "Manuelle Eingabe"], key="analysis_workflows", on_change="rerun",
+    )
+    # Beide Bereiche bleiben gerendert, damit ein Tabwechsel keine Entwürfe
+    # oder Bestätigungen löscht. Teure Extraktion und Berechnung sind separat
+    # durch Upload-Signatur bzw. ausdrückliche Analyse-Buttons geschützt.
+    with pdf_tab:
+        render_pdf_section(on_accept=_prepare_pdf_analysis)
+        _render_pdf_analysis()
+    with manual_tab:
+        _render_manual_analysis()

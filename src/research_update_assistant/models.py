@@ -33,7 +33,9 @@ class FinancialPeriod:
     """Finanzwerte einer Periode in einer einheitlichen Währung und Skalierung.
 
 period_end ist ein datetime.date, period_months eine positive Monatsanzahl.
-Alle Finanzwerte verwenden dieselbe Einheit, zum Beispiel CHF million.
+Finanzsummen verwenden dieselbe Einheit, zum Beispiel CHF million. EPS-Werte
+basic_eps und diluted_eps sind davon unabhängig Währungsbeträge je Aktie,
+also beispielsweise CHF je Aktie, niemals Millionen CHF je Aktie.
 Negative Werte sind erlaubt, insbesondere Verluste und Cashflow-Capex.
 Unveränderliche Datensätze schützen die ausgewiesenen Werte vor Überschreiben.
 """
@@ -62,6 +64,8 @@ Unveränderliche Datensätze schützen die ausgewiesenen Werte vor Überschreibe
     payables: float | None = None
     total_assets: float | None = None
     equity: float | None = None
+    basic_eps: float | None = None
+    diluted_eps: float | None = None
 
     source: SourceMetadata | None = None
 

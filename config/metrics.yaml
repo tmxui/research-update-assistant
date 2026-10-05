@@ -1,0 +1,80 @@
+# Stabile interne IDs; Bezeichnungen werden nur zur Kandidaten-Zuordnung benutzt.
+# Ein Treffer bleibt ein Vorschlag und muss von einem Menschen bestätigt werden.
+schema_version: 1
+metrics:
+  revenue:
+    display_name_de: Umsatz
+    statement_type: income_statement
+    synonyms: [Umsatz, Umsatzerlös, Umsatzerlöse, Nettoumsatz, Netto-Umsatz, Nettoerlös, Nettoerlöse, Revenue, Sales, Net Sales, Konzernumsatz]
+  ebitda:
+    display_name_de: EBITDA
+    statement_type: income_statement
+    synonyms: [EBITDA, Betriebsergebnis vor Abschreibungen, Betriebsgewinn vor Abschreibungen, "Ergebnis vor Zinsen, Steuern und Abschreibungen", Operativer Cashflow (EBITDA)]
+  adjusted_ebitda:
+    display_name_de: Bereinigtes EBITDA
+    statement_type: income_statement
+    synonyms: [Bereinigtes EBITDA, EBITDA bereinigt, Adjusted EBITDA, EBITDA vor Sondereffekten, EBITDA vor Einmaleffekten, Bereinigtes Betriebsergebnis vor Abschreibungen]
+  ebit:
+    display_name_de: EBIT
+    statement_type: income_statement
+    synonyms: [EBIT, Betriebsergebnis, Betriebsgewinn, Operating Profit, Operating Income, Operating Result, Betriebsergebnis (EBIT), Betriebsgewinn (EBIT)]
+  adjusted_ebit:
+    display_name_de: Bereinigtes EBIT
+    statement_type: income_statement
+    synonyms: [Bereinigtes EBIT, EBIT bereinigt, Adjusted EBIT, EBIT vor Sondereffekten, EBIT vor Einmaleffekten, Bereinigtes Betriebsergebnis, Bereinigter Betriebsgewinn]
+  net_income:
+    display_name_de: Nettoergebnis
+    statement_type: income_statement
+    synonyms: [Nettoergebnis, Reingewinn, Konzerngewinn, Jahresgewinn, Jahresüberschuss, Ergebnis nach Steuern, Net Income, Net Profit]
+  basic_eps:
+    display_name_de: Unverwässertes Ergebnis je Aktie
+    statement_type: income_statement
+    synonyms: [Unverwässertes Ergebnis je Aktie, Unverwässerter Gewinn je Aktie, Basic EPS, Basic Earnings per Share, Earnings per Share (basic), Ergebnis je Aktie (unverwässert)]
+  diluted_eps:
+    display_name_de: Verwässertes Ergebnis je Aktie
+    statement_type: income_statement
+    synonyms: [Verwässertes Ergebnis je Aktie, Verwässerter Gewinn je Aktie, Diluted EPS, Diluted Earnings per Share, Earnings per Share (diluted), Ergebnis je Aktie (verwässert)]
+  operating_cash_flow:
+    display_name_de: Geldfluss aus Geschäftstätigkeit
+    statement_type: cash_flow
+    synonyms: [Geldfluss aus Geschäftstätigkeit, Mittelfluss aus Geschäftstätigkeit, Nettomittelfluss aus Geschäftstätigkeit, Nettomittelfluss aus/für (-) Geschäftstätigkeit, Cashflow aus Geschäftstätigkeit, Cash Flow aus Geschäftstätigkeit, Cash Flow from Operating Activities, Net Cash from Operating Activities]
+  capex:
+    display_name_de: Investitionen (Capex)
+    statement_type: cash_flow
+    synonyms: [Investitionen, Investitionen in Sachanlagen, Investitionen in Sachanlagen und immaterielle Anlagen, Investitionen in Sachanlagen und immaterielle Vermögenswerte, Kauf von Sachanlagen, Kauf von Sachanlagen und immateriellen Anlagen, Capital Expenditure, Capital Expenditures, Capex]
+  reported_free_cash_flow:
+    display_name_de: Ausgewiesener Free Cashflow
+    statement_type: cash_flow
+    synonyms: [Free Cashflow, Free Cash Flow, Freier Cashflow, Freier Geldfluss, Operativer Freier Geldfluss]
+  cash:
+    display_name_de: Flüssige Mittel
+    statement_type: balance_sheet
+    synonyms: [Flüssige Mittel, Flüssige Mittel und Zahlungsmitteläquivalente, Zahlungsmittel und Zahlungsmitteläquivalente, Liquide Mittel, Cash and Cash Equivalents]
+  gross_debt:
+    display_name_de: Finanzverbindlichkeiten
+    statement_type: balance_sheet
+    synonyms: [Finanzverbindlichkeiten, Finanzschulden, verzinsliche Verbindlichkeiten, zinstragende Verbindlichkeiten, Borrowings, Financial Debt]
+  reported_net_debt:
+    display_name_de: Ausgewiesene Nettoverschuldung
+    statement_type: balance_sheet
+    synonyms: [Nettoverschuldung, Nettofinanzverschuldung, Netto-Finanzverschuldung, Nettoschulden, Net Debt]
+  inventory:
+    display_name_de: Vorräte
+    statement_type: balance_sheet
+    synonyms: [Vorräte, Inventories, Inventory]
+  receivables:
+    display_name_de: Forderungen aus Lieferungen und Leistungen
+    statement_type: balance_sheet
+    synonyms: [Forderungen aus Lieferungen und Leistungen, Kundenforderungen, Trade Receivables, Accounts Receivable]
+  payables:
+    display_name_de: Verbindlichkeiten aus Lieferungen und Leistungen
+    statement_type: balance_sheet
+    synonyms: [Verbindlichkeiten aus Lieferungen und Leistungen, Lieferantenverbindlichkeiten, Trade Payables, Accounts Payable]
+  total_assets:
+    display_name_de: Bilanzsumme
+    statement_type: balance_sheet
+    synonyms: [Bilanzsumme, Summe Aktiven, Aktiven, Gesamtvermögen, Total Assets]
+  equity:
+    display_name_de: Eigenkapital
+    statement_type: balance_sheet
+    synonyms: [Eigenkapital, Konzerneigenkapital, konsolidiertes Eigenkapital, "Shareholders' Equity", Total Equity]

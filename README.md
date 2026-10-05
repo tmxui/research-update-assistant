@@ -11,14 +11,16 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 5A – PDF-Dokumentanalyse:** PDFs können lokal hochgeladen, seitenweise
-ausgelesen und durchsucht werden. Roh-Tabellen behalten ihre Seitenherkunft.
+**Phase 5B – Finanzkennzahlen-Extraktion und Validierung:** PDFs liefern
+prüfpflichtige Kennzahl-Kandidaten aus Tabellen und Wortpositionen. Nach
+ausdrücklicher Analystenbestätigung verwendet die App dieselbe Finanzanalyse
+wie bei manuellen Eingaben. Dokumentbrowser und Textsuche bleiben verfügbar.
 Der unabhängige manuelle Workflow erfasst weiterhin
 zwei oder drei Perioden und zeigt eine chronologische Finanzübersicht sowie
 aufeinanderfolgende Periodenvergleiche. Eine unabhängige Regel-Engine erzeugt
 transparente Research-Prüfpunkte aus den bestehenden Phase-1-Berechnungen.
 Fünf Kennzahlenkarten und Plotly-Diagramme machen die vorhandenen Daten sichtbar.
-Automatische Finanzkennzahlen-Zuordnung aus PDFs, OCR, Consensus, Excel-Export
+OCR, externe LLM/API-Extraktion, Consensus, Excel-Export
 und Machine Learning sind noch nicht implementiert.
 
 ## Installation und Start (macOS / VS-Code-Terminal)
@@ -44,7 +46,7 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-5A-Hinweis, den PDF-Uploader und das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
+Phase-5B-Hinweis, den PDF-Uploader und das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
 `.venv` enthält die Python-Pakete nur für dieses Projekt. Durch die Aktivierung
@@ -66,10 +68,98 @@ Die Tests prüfen synthetische PDFs, Seitenherkunft, Roh-Tabellen, Textsuche und
 PDF-Fehler sowie Diagrammdaten und Kennzahlenkarten, die Research-Regeln und YAML-Validierung, den Formularablauf, Schweizer Zahlenformate, den App-Start,
 die Formeln, fehlende Werte, Einheiten, Halbjahres-Leverage und die Historie
 mit mehreren Quellen.
-Git und der GitHub-Remote sind eingerichtet. Phase-5A-Änderungen werden
+Git und der GitHub-Remote sind eingerichtet. Phase-5B-Änderungen werden
 erst nach gemeinsamer Prüfung committet und gepusht.
 
-## PDF-Dokumentanalyse in Phase 5A
+## Finanzkennzahlen-Extraktion in Phase 5B
+
+**Ablauf:** PDF hochladen → Kandidaten prüfen → gewünschte Kennzahlen einzeln
+bestätigen → Unternehmen und zwei Vergleichsperioden prüfen →
+**Bestätigte Daten übernehmen** → **Analyse aus bestätigten PDF-Daten starten**.
+Ein Upload allein erzeugt keine Finanzperioden; die Übernahme bereitet bestätigte
+Daten vor und startet noch keine Berechnung.
+
+**Phase 5B.2:** Zwei Tabs trennen **PDF-gestützte Analyse** und **Manuelle Eingabe**.
+Der PDF-Tab zeigt nach der Übernahme Unternehmen, Perioden, Währung, Einheit und
+die Anzahl bestätigter Kennzahlen. Die Analyse startet daraus ohne erneute
+manuelle Dateneingabe. Im manuellen Tab bleiben Beispieldaten, zwei oder drei
+Perioden und **Analyse berechnen** verfügbar. Beide Wege verwenden dieselbe
+Analyse-Engine, bewahren ihre Entwürfe und Ergebnisse aber unabhängig voneinander.
+
+Statement-Seiten werden aus Überschriften, typischen Zeilenbezeichnungen,
+Jahresangaben und numerischen Werten erkannt. Primäre Erfolgsrechnung, Bilanz
+und Geldflussrechnung haben Vorrang vor Notes, Kennzahlen-/Mehrjahresübersichten,
+APM-Tabellen, Highlights und Fliesstext. Innerhalb einer Quellenart werden
+sicherere Zuordnungen zuerst angeboten. Eine zahlenreiche Kennzahlenübersicht
+wird dadurch nicht zum Primärstatement. Segmentquellen stehen am Ende und sind
+für Konzernwerte gesperrt.
+Eine Heuristik kann eine Seite falsch einordnen; deshalb bleibt die Prüfung nötig.
+
+Der Parser kombiniert pdfplumber-Tabellen mit PyMuPDF-Wortpositionen.
+Wörter nahe derselben Grundlinie werden sortiert; Jahres- und Datumsheader
+legen die Betragsspalten fest. Zuordnungen folgen deren x-Positionen,
+auch bei umgekehrter Jahresreihenfolge oder separaten Label-/Wertzeilen.
+Die benannten Toleranzen stehen in `layout_parser.py`. Ohne brauchbare
+Positionen/Tabellen ist ein konservativer Textfallback möglich: Die Perioden
+bleiben dann unbekannt und müssen ausdrücklich zugeordnet werden.
+
+`config/metrics.yaml` enthält 19 stabile Kennzahl-IDs mit deutschen Schweizer
+und englischen Synonymen. Explizite Kürzel haben Vorrang:
+**Operativer Cashflow (EBITDA)** ist EBITDA, nicht Geldfluss aus Geschäftstätigkeit.
+Bereinigtes EBIT/EBITDA bleiben eigene Kennzahlen. Margen und Wachstumsraten
+werden nicht als absolute Beträge behandelt. Segmentzusätze wie Europa sperren
+die Konzernübernahme. Ähnliche Schreibweisen erhalten nur niedrige Sicherheit.
+Umsatz je Beschäftigten ist kein Konzernumsatz und wird ausgeschlossen.
+Die Originalbezeichnung bleibt erhalten; ein separates Mapping-Label entfernt
+dekorative PDF-Zeichen. Note-Nummern werden nur bei belegtem Spalten- oder
+Verweiskontext entfernt, nicht pauschal aus jeder Bezeichnung.
+
+Kandidaten zeigen **Hoch / Mittel / Niedrig** mit Gründen, keine vermeintlichen
+Wahrscheinlichkeiten. Unterschiedliche Werte oder Quellen bleiben auswählbar;
+identische Werte derselben Seite können kanalübergreifend gruppiert werden.
+Einheiten werden nicht still umgerechnet. Schweizer Gruppierungen und
+Dezimalzeichen bleiben nachvollziehbar; numerische Accounting-Klammern
+werden als negatives Vorzeichen gelesen. EPS bleibt ein Währungsbetrag je Aktie,
+unabhängig von Millionen/Tausend bei den übrigen Beträgen.
+
+Im Prüfbereich kannst du Quellen wählen, die Kennzahl-Zuordnung ändern,
+Werte korrigieren, ablehnen oder fehlende Angaben manuell ergänzen.
+Ein gemeinsamer Aktionsbereich gilt für die gesamte Kennzahl und beide Perioden.
+**Änderungen zurücksetzen** stellt die Originalwerte, Kennzahl-Zuordnung, Währung
+und Einheit der gewählten Quelle wieder her. **Kandidat ablehnen** stellt ebenfalls
+die Originale wieder her und entfernt die aktive Bestätigung. Erneute Bearbeitung
+und Bestätigung bleiben möglich; frühere Bestätigungen werden separat in der
+Sitzung bewahrt und nicht als aktive Finanzdaten verwendet. Andere Kennzahlen
+werden durch Reset oder Ablehnung nicht verändert.
+Standardmässig erscheinen die besten fünf Quellen; **Weitere Quellen anzeigen**
+öffnet die übrigen Alternativen. Auch gerundete und präzise Beträge bleiben
+getrennt erhalten. Eine bereits gewählte weitere Quelle bleibt beim Einklappen sichtbar.
+Vorgeschlagene/abgelehnte Werte werden nicht übernommen. Änderungen verlangen
+eine neue Bestätigung. Zwei gleich lange Jahres- oder Halbjahresperioden sowie
+deren Stichtage werden vor Übernahme geprüft. Unvollständige Finanzdaten sind
+erlaubt und bleiben `None`; Halbjahres-Leverage wird weiterhin nicht annualisiert.
+Änderungen an PDF-Prüfdaten machen deren Übernahme und Analyse ungültig; bitte
+erneut übernehmen und starten. Ein neuer Upload verwirft den vorherigen
+PDF-Prüfstand, erhält aber manuelle Eingaben und Ergebnisse.
+
+Jede bestätigte Zahl bewahrt einen separaten Audit-Trail mit Rohwert,
+ursprünglicher Zuordnung, bestätigtem Wert, Dokument, Seite, Quelltext,
+Extraktionsmethode und optionaler Position. Manuelle Ergänzungen erhalten keine
+erfundene PDF-Quelle. `FinancialPeriod` enthält weiterhin einfache Zahlen;
+`FinancialHistory`, Berechnungen, Research-Regeln und Charts werden gemeinsam genutzt.
+Die Quellen bleiben unter **Quellen und bestätigte Korrekturen** einsehbar.
+
+Die synthetischen Tests decken alle drei Statements, Linien- und Positionslayouts,
+Mapping, Einheiten, Korrekturen, Bestätigung und das bestehende Dashboard ab.
+Ranking-Regressionsfälle bilden frühe gerundete Kennzahlenübersichten,
+spätere präzise Primärstatements, PDF-Verweise und Umsatz je Beschäftigten nach.
+Es werden keine externen Berichte als Testfixtures benötigt. Öffentliche
+Schweizer Berichte prüfen wir zusätzlich manuell, insbesondere EBITDA,
+tatsächlichen Operating Cash Flow, Free Cashflow, Vorräte und Forderungen.
+Noch kein Commit/Push.
+Es gibt keine LLM/API-Extraktion, automatische Ursachenerklärung oder Investment-Empfehlung.
+
+## PDF-Dokumentbrowser aus Phase 5A
 
 Unter **Geschäftsbericht einlesen** kannst du ein PDF hochladen. PyMuPDF liest
 Text und Dokumentinformationen; pdfplumber versucht, Tabellen mit seiner
@@ -88,7 +178,8 @@ komplexe Layouts und Texte ohne Zeichencodierung können unvollständig ausgeles
 **Dokument durchsuchen** sucht wörtlich und ohne Beachtung der Gross-/Kleinschreibung
 im Seitentext. Pro Trefferseite erscheinen die Anzahl Treffer und ein kurzer
 Originaltext-Ausschnitt um den ersten Treffer. Mit **PDF-Seite … anzeigen**
-wechselst du zur Quelle. Es gibt kein Fuzzy Matching oder fachliches Metric Mapping.
+wechselst du zur Quelle. Diese Textsuche bleibt wörtlich; das separate Kennzahl-Mapping
+findet im Phase-5B-Prüfbereich statt.
 
 Die Diagnose verwendet eine transparente Heuristik: Weniger als 40
 Nicht-Leerzeichen gelten als textarme Seite. Mindestens 80 % textarme Seiten
@@ -110,7 +201,7 @@ Einzelne Seiten-/Tabellenfehler erscheinen als Warnungen; andere Seiten bleiben 
 Die automatisierten Tests erzeugen synthetische PDFs im Speicher und benötigen
 keine externen Geschäftsberichte. Der nächste gemeinsame Praxistest ist ein
 öffentliches Schweizer Geschäftsbericht-PDF: Seitenzahl, konkrete Textstellen,
-Tabellen und Suchtreffer mit dem Original vergleichen. Erst später folgt Phase 5B.
+Tabellen und Suchtreffer sowie Phase-5B-Kandidaten mit dem Original vergleichen.
 
 ## Analyst-Dashboard und Trendanalyse in Phase 4
 
@@ -291,6 +382,14 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/document_models.py`: Dokumente, Seiten, Roh-Tabellen und Suchtreffer.
 - `src/research_update_assistant/pdf_extractor.py`: Unabhängige PDF-Extraktion, Qualitätsdiagnose und Textsuche.
 - `src/research_update_assistant/pdf_ui.py`: PDF-Uploader, Dokumentübersicht und Seiten-/Suchbrowser.
+- `config/metrics.yaml`: Stabile Kennzahl-IDs und konfigurierbare Synonyme.
+- `src/research_update_assistant/candidate_models.py`: Unbestätigte Kennzahl-/Periodenvorschläge mit Quellen.
+- `src/research_update_assistant/metric_mapping.py`: Geprüfte YAML-Konfiguration und Label-Zuordnung.
+- `src/research_update_assistant/statement_detection.py`: Mehrere Signale für Statement-Seiten und Quellenpriorität.
+- `src/research_update_assistant/layout_parser.py`: Zeilen, Spaltenheader und numerische Zellen.
+- `src/research_update_assistant/financial_parser.py`: Kandidaten aus Tabellen, Layout und Textfallback.
+- `src/research_update_assistant/validation.py`: Bestätigte Observations und explizite Historienübernahme.
+- `src/research_update_assistant/validation_ui.py`: Analystenprüfung, Korrektur und Bestätigung.
 - `src/research_update_assistant/charts.py`: Unabhängige Plotly-Figures aus vorhandenen Periodenwerten und Kennzahlen.
 - `src/research_update_assistant/input_parsing.py`: Zahlen-Parsing, Eingabevalidierung und Periodenerstellung.
 - `src/research_update_assistant/formatting.py`: Anzeige von Beträgen, Prozentwerten, Multiplikatoren und Basispunkten.

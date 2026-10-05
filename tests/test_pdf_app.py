@@ -107,7 +107,8 @@ def test_replacing_same_filename_resets_page_and_search(synthetic_pdf_bytes):
     assert app.number_input(key="pdf_page_number").value == 1
     assert app.text_input(key="pdf_search_query").value == ""
     assert not any(element.key == "pdf_page_text" for element in app.container)
-    assert not app.dataframe
+    assert not any(item.key and item.key.startswith("pdf_table_") for item in app.dataframe)
+    assert app.session_state["pdf_candidates"] == ()
     assert app.session_state["pdf_document"].possibly_scanned
     assert any("könnte gescannt sein" in warning.value for warning in app.warning)
 
