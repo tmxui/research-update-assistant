@@ -20,6 +20,7 @@ htmlcov/
 # Ausschliesslich lokale Daten; niemals vertrauliche Inhalte einchecken
 private_data/
 local_data/
+local_reports/
 
 # Lokale Editor- und Betriebssystemdateien
 .vscode/

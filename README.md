@@ -11,7 +11,10 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 5B – Finanzkennzahlen-Extraktion und Validierung:** PDFs liefern
+**Phase 6 – Mehrjährige Finanzhistorie:** Mehrere bestätigte Reports eines
+Unternehmens können in einer lokalen Historie zusammengeführt werden. Alle
+Quellen bleiben erhalten; abweichende Werte erfordern eine Quellenauswahl.
+Trendzeitraum und Vergleichspaar sind unabhängig wählbar. PDFs liefern
 prüfpflichtige Kennzahl-Kandidaten aus Tabellen und Wortpositionen. Nach
 ausdrücklicher Analystenbestätigung verwendet die App dieselbe Finanzanalyse
 wie bei manuellen Eingaben. Dokumentbrowser und Textsuche bleiben verfügbar.
@@ -46,7 +49,7 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-5B-Hinweis, den PDF-Uploader und das Eingabeformular sehen. Beende den Server im Terminal mit `Ctrl+C`.
+Phase-6-Hinweis sowie die Tabs PDF-gestützte Analyse, Manuelle Eingabe und Finanzhistorie sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
 `.venv` enthält die Python-Pakete nur für dieses Projekt. Durch die Aktivierung
@@ -68,8 +71,78 @@ Die Tests prüfen synthetische PDFs, Seitenherkunft, Roh-Tabellen, Textsuche und
 PDF-Fehler sowie Diagrammdaten und Kennzahlenkarten, die Research-Regeln und YAML-Validierung, den Formularablauf, Schweizer Zahlenformate, den App-Start,
 die Formeln, fehlende Werte, Einheiten, Halbjahres-Leverage und die Historie
 mit mehreren Quellen.
-Git und der GitHub-Remote sind eingerichtet. Phase-5B-Änderungen werden
-erst nach gemeinsamer Prüfung committet und gepusht.
+Git und der GitHub-Remote sind eingerichtet. Phase 6 wurde nach dem lokalen
+Multi-Report-Test mit den konsolidierten Geberit-Abschlüssen 2025 und 2024
+fachlich freigegeben.
+
+## Mehrjährige Finanzhistorie in Phase 6
+
+Ein Bericht ist eine **Quelle**, eine Periode ein wirtschaftlicher Zeitraum.
+Ein Geschäftsbericht 2025 enthält beispielsweise FY2025 und den Vergleich
+FY2024; der Bericht 2024 ergänzt FY2023 und eine weitere Quelle für FY2024.
+Die wirtschaftliche Identität verwendet **Stichtag und Monatsanzahl**, nicht
+nur das Label. Jahres- und Halbjahresperioden bleiben unterscheidbar.
+
+**Ablauf:** Bericht wie bisher prüfen → **Bestätigte Daten übernehmen** →
+Unternehmenszugehörigkeit bestätigen → **Zur Finanzhistorie hinzufügen** →
+**Weiteren Bericht hinzufügen**. Die bestehende Historie bleibt beim neuen
+Upload, bei Reset oder Ablehnung im PDF-Editor erhalten. Unternehmen, Währung
+und Skalierung müssen übereinstimmen; keine automatische Zusammenführung
+ähnlicher Unternehmensnamen oder Umrechnung. Die Einzelreport-Analyse und
+der manuelle Workflow bleiben zusätzlich verfügbar.
+
+`HistoryWorkspace` speichert bestätigte Report-Snapshots und einzelne
+`MetricObservation`-Quellwerte. Eine `PeriodMetricResolution` bündelt die
+Observations derselben Kennzahl/Periode:
+
+- Eine bestätigte Quelle liefert einen aktiven Wert (`resolved`).
+- Exakt gleiche Werte sind `equivalent`: durch mehrere Quellen bestätigt.
+  Wiederholtes Hinzufügen desselben unveränderten Reports ist idempotent.
+- Unterschiedliche Werte bleiben `unresolved`. Eine Abweichung ist noch kein
+  bewiesenes Restatement; auch Umklassifizierung oder Fehler sind möglich.
+- `rounding_difference` bedeutet **mögliche** Rundung: Nur mit nachgewiesenen
+  Dezimalstellen wird geprüft, ob sich kaufmännische Rundungsintervalle
+  überschneiden. Es gibt keine allgemeine Betrags- oder Prozenttoleranz.
+  Beispielsweise passen 1000.0 und 999.96 zur gleichen gerundeten Zahl.
+  Ohne Präzisionsnachweis bleibt die Abweichung ein offener Konflikt.
+  Analystisch korrigierte Zahlen erhalten keine Präzision aus dem alten Rohtext.
+
+Für Rundungsdifferenzen und sonstige Konflikte entscheidet der Analyst im
+Bereich **Abweichende historische Werte prüfen**. Die Quellen mit Werten,
+Seiten und Bezeichnungen bleiben sichtbar. **Quelle prüfen** verwendet den
+bestehenden Seitenbrowser für genau den archivierten Report. Auswahl und
+optional Grund werden protokolliert; alternative Observations, Originalwerte,
+Korrekturen und Quellen werden nicht gelöscht. Eine neue abweichende Quelle
+öffnet eine frühere Entscheidung erneut. Frühere Entscheidungen bleiben im
+Auflösungsverlauf nachvollziehbar. Geänderte Daten unter einer bereits
+verwendeten Berichts-ID werden abgewiesen und benötigen eine neue Report-ID.
+
+Offene Kennzahlen gehen als `None` in die normalisierte Historie ein. Davon
+abhängige Formeln bleiben nicht verfügbar; fehlende Werte werden weder als 0
+noch durch Interpolation ergänzt. **Historientabelle** zeigt alle gespeicherten
+Perioden. Die Auflösung erzeugt normale `FinancialPeriod`-Objekte und eine
+`FinancialHistory`; bestehende Berechnungen, Flags und Charts werden verwendet.
+
+**Perioden für Analyse auswählen** bestimmt nur den Trendzeitraum: zwei, drei,
+fünf oder beliebig viele vergleichbare Perioden. Standard sind die zwei
+neuesten kompatiblen Jahresperioden, andernfalls Halbjahre. **Vergleichsperioden**
+legt separat Basisperiode und aktuelle Periode fest. Charts verwenden den
+Trendzeitraum, Research-Prüfpunkte genau dieses eine Paar. Kennzahlenkarten
+zeigen die jüngste Trendperiode; Deltas erscheinen nur, wenn sie der aktuellen
+Vergleichsperiode entspricht. H1 wird mit H1, FY mit FY verglichen. Auch die
+Trenddarstellung trennt Jahres- und Halbjahresperioden konservativ.
+
+Die Historie und archivierten Seitentexte leben nur in dieser Browser-Sitzung.
+Ein neuer Upload löscht sie nicht; Schliessen der Sitzung oder Server-Neustart
+kann sie verlieren. **Finanzhistorie zurücksetzen** erfordert eine bewusste
+Bestätigung. Es gibt noch keine dauerhafte Speicherung oder Datenbank.
+Der unabhängige Kern unterstützt bereits bestätigte manuelle Perioden über
+`add_periods`; dafür wird keine PDF-Herkunft erfunden.
+
+**Bekannte Parsergrenzen (Backlog):** Im Geberit-Test wurden `gross_debt`,
+`total_assets` und `equity` sowie die EBITDA-Fussnote im Report 2024 noch nicht
+zuverlässig extrahiert. Nicht bestätigte Werte bleiben `None`. Diese Punkte
+blockieren die freigegebene Phase 6 nicht und werden später separat behandelt.
 
 ## Finanzkennzahlen-Extraktion in Phase 5B
 
@@ -378,6 +451,10 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/models.py`: Periodenwerte, Source-Metadaten und Ergebnis-Dataclasses.
 - `src/research_update_assistant/calculations.py`: Formeln und Zwei-Perioden-Vergleich.
 - `src/research_update_assistant/history.py`: Chronologische Historie ohne Konfliktauflösung.
+- `src/research_update_assistant/history_workspace.py`: Report-Snapshots, Observations, Rundungsprüfung und Quellenauflösung.
+- `src/research_update_assistant/analysis_selection.py`: Flexibler Trendzeitraum und genau ein ausgewähltes Vergleichspaar.
+- `src/research_update_assistant/history_ui.py`: Lokaler Historienbereich, Konfliktprüfung und Periodenauswahl.
+- `src/research_update_assistant/source_ui.py`: Gemeinsame Anzeige der Provenance und Analystenkorrekturen.
 - `src/research_update_assistant/ui.py`: Manuelles Formular, Analyst-Dashboard und Ergebnistabellen, ohne Finanzformeln.
 - `src/research_update_assistant/document_models.py`: Dokumente, Seiten, Roh-Tabellen und Suchtreffer.
 - `src/research_update_assistant/pdf_extractor.py`: Unabhängige PDF-Extraktion, Qualitätsdiagnose und Textsuche.

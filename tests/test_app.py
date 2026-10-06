@@ -54,7 +54,7 @@ def test_app_starts_with_german_content() -> None:
     assert app.title[0].value == "Research Update Assistant"
     assert app.markdown[0].value == "Strukturierte Auswertung von Unternehmensresultaten"
     assert app.info[0].value == (
-        "Aktueller Entwicklungsstand: Phase 5B.2 – Getrennte Eingabewege und Kandidatenprüfung"
+        "Aktueller Entwicklungsstand: Phase 6 – Mehrjährige Finanzhistorie"
     )
     assert [item.value for item in app.subheader] == [
         "1. Unternehmensdaten", "2. Finanzperioden erfassen", "3. Daten prüfen",
@@ -234,7 +234,7 @@ def test_research_flags_appear_only_after_analysis_and_show_latest_pair_first() 
     assert not app.exception
     assert not app.error
     assert [element.value for element in app.header] == [
-        "Geschäftsbericht einlesen", "Research-Prüfpunkte", "Kennzahlenüberblick", "Finanzübersicht", "Trendanalyse", "Periodenvergleich",
+        "Geschäftsbericht einlesen", "Research-Prüfpunkte", "Kennzahlenüberblick", "Finanzübersicht", "Trendanalyse", "Periodenvergleich", "Finanzhistorie",
     ]
     assert [element.value for element in app.subheader][-2:] == ["FY2025 vs FY2024", "FY2024 vs FY2023"]
     result = app.session_state["analysis_result"]
@@ -366,7 +366,8 @@ def test_dashboard_has_five_latest_metrics_with_neutral_deltas(count) -> None:
     assert all(metric.proto.color == metric.proto.GRAY for metric in app.metric)
     assert all(metric.proto.direction == metric.proto.NONE for metric in app.metric)
     assert any("Geldbeträge in CHF Mio." in caption.value for caption in app.caption)
-    assert [tab.label for tab in app.tabs][-4:] == [
+    manual_tab = next(tab for tab in app.tabs if tab.label == "Manuelle Eingabe")
+    assert [tab.label for tab in manual_tab.tabs][-4:] == [
         "Ergebnis & Margen", "Cashflow", "Bilanz & Verschuldung", "Working Capital",
     ]
 

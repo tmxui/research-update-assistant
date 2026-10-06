@@ -22,12 +22,12 @@ Eine unveränderliche Sequenz verhindert unbeabsichtigtes Anhängen ohne Sortier
     periods: tuple[FinancialPeriod, ...] = ()
 
     def __post_init__(self) -> None:
-        self.periods = tuple(sorted(self.periods, key=lambda period: period.period_end))
+        self.periods = tuple(sorted(self.periods, key=lambda period: (period.period_end, period.period_months)))
 
     def add_period(self, period: FinancialPeriod) -> None:
         """Ergänze einen Datensatz und sortiere nach dem tatsächlichen Stichtag."""
         self.periods = tuple(
-            sorted((*self.periods, period), key=lambda item: item.period_end)
+            sorted((*self.periods, period), key=lambda item: (item.period_end, item.period_months))
         )
 
     def get_periods(self, period_label: str) -> tuple[FinancialPeriod, ...]:

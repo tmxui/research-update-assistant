@@ -1,6 +1,7 @@
 """Prüfe Chart-Daten und Struktur, ohne Pixel-, Farb- oder Höhentests."""
 
 from dataclasses import replace
+from datetime import date
 import subprocess
 import sys
 
@@ -247,3 +248,37 @@ def test_chart_module_works_without_streamlit():
     )
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("count", [2, 3, 5])
+def test_all_charts_support_flexible_two_three_and_five_period_trends(periods, count):
+    early = tuple(
+        replace(periods["FY2023"], period_label=f"FY{year}", period_end=date(year, 12, 31))
+        for year in (2021, 2022)
+    )
+    full = FinancialHistory((*periods.values(), *early))
+    history = FinancialHistory(tuple(reversed(full.periods[-count:])))
+    metrics = {period: calculate_period_metrics(period) for period in history.periods}
+    labels = tuple(period.period_label for period in history.periods)
+    for figure in _all_charts(history, metrics):
+        assert tuple(figure.layout.xaxis.categoryarray) == labels
+        assert all(tuple(trace.x) == labels for trace in figure.data)
+        assert all(len(trace.y) == count for trace in figure.data)
+    assert len(full.periods) == 5
+
+
+def test_five_year_missing_cashflow_and_margin_are_gaps_not_interpolation(periods):
+    early = (
+        replace(periods["FY2023"], period_label="FY2021", period_end=date(2021, 12, 31)),
+        replace(periods["FY2023"], period_label="FY2022", period_end=date(2022, 12, 31),
+                capex=None, ebit=None),
+    )
+    history = FinancialHistory((*periods.values(), *early))
+    metrics = {period: calculate_period_metrics(period) for period in history.periods}
+    cashflow = _traces(create_cashflow_chart(history, metrics))["Berechneter Free Cashflow"]
+    margin = _traces(create_margin_chart(history, metrics))["EBIT-Marge"]
+    assert tuple(cashflow.x) == tuple(margin.x) == tuple(f"FY{year}" for year in range(2021, 2026))
+    assert cashflow.y[0] == 95 and cashflow.y[1] is None and cashflow.y[2] == 95
+    assert margin.y[1] is None
+    assert margin.y[0] == margin.y[2] == 145 / 920
+    assert margin.connectgaps is False

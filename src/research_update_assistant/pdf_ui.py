@@ -22,6 +22,7 @@ def _reset_document(signature: tuple[str, str] | None) -> None:
         pdf_page_number=1, pdf_search_query="",
         pdf_candidates=(), pdf_metric_config=None, pdf_candidate_error=None,
         pdf_ready_history=None, pdf_ready_observations=(), pdf_analysis_result=None,
+        history_company_confirm=False,
     )
 
 
@@ -86,11 +87,11 @@ def _render_search(document: ExtractedDocument) -> None:
         st.caption("Die ersten 100 Trefferseiten werden angezeigt. Grenze den Suchbegriff bei Bedarf ein.")
 
 
-def _render_page_browser(document: ExtractedDocument) -> None:
+def _render_page_browser(document: ExtractedDocument, *, key_prefix: str = "pdf_") -> None:
     st.subheader("Seitenbrowser")
     number = st.number_input(
         "PDF-Seite auswählen", min_value=1, max_value=document.page_count,
-        step=1, key="pdf_page_number",
+        step=1, key=f"{key_prefix}page_number",
     )
     if not isinstance(number, int) or not 1 <= number <= document.page_count:
         st.error("Bitte wähle eine gültige PDF-Seitennummer.")
@@ -103,7 +104,7 @@ def _render_page_browser(document: ExtractedDocument) -> None:
     )
     if page.has_text:
         st.caption("Extrahierter Seitentext")
-        with st.container(height=260, border=True, key="pdf_page_text"):
+        with st.container(height=260, border=True, key=f"{key_prefix}page_text"):
             st.text(page.text)
     else:
         st.caption("Kein maschinenlesbarer Text auf dieser Seite verfügbar.")
@@ -117,7 +118,7 @@ def _render_page_browser(document: ExtractedDocument) -> None:
             for index in range(table.column_count)
         }
         st.dataframe(
-            columns, hide_index=True, key=f"pdf_table_{number}_{table.table_index}",
+            columns, hide_index=True, key=f"{key_prefix}table_{number}_{table.table_index}",
             alt=f"Rohe Tabelle {table.table_index} auf PDF-Seite {number}",
         )
         if table.bbox:
@@ -131,8 +132,10 @@ def render_pdf_section(on_accept: AcceptHistory) -> None:
     st.session_state.setdefault("pdf_error", None)
     st.header("Geschäftsbericht einlesen")
     st.caption("PDF-Vorschläge werden erst nach deiner Prüfung und Bestätigung in die Finanzanalyse übernommen.")
+    generation = st.session_state.get("pdf_upload_generation", 0)
+    upload_key = "pdf_upload" if generation == 0 else f"pdf_upload_{generation}"
     uploaded = st.file_uploader(
-        "Geschäfts- oder Ergebnisbericht als PDF hochladen", type=["pdf"], key="pdf_upload",
+        "Geschäfts- oder Ergebnisbericht als PDF hochladen", type=["pdf"], key=upload_key,
     )
     if uploaded is None:
         if st.session_state["pdf_signature"] is not None:

@@ -17,6 +17,9 @@ from .formatting import (
     format_multiple, format_percentage,
 )
 from .history import FinancialHistory
+from .analysis_selection import HistoryAnalysisResult
+from .history_ui import render_history_addition, render_history_section
+from .source_ui import render_observation_audit
 from .input_parsing import (
     CURRENCIES, FINANCIAL_INPUT_GROUPS, SCALE_OPTIONS,
     InputValidationError, ManualPeriodInput, create_manual_history,
@@ -230,6 +233,7 @@ def _render_pdf_analysis() -> None:
             st.session_state["pdf_analysis_result"] = result
             st.session_state["analysis_result"] = result
             st.session_state["analysis_source"] = "pdf"
+    render_history_addition(history, observations)
     result = st.session_state["pdf_analysis_result"]
     if result is not None:
         _render_results(result, from_pdf=True)
@@ -253,7 +257,7 @@ def _table_data(labels: list[str], columns: dict[str, list[str]]) -> dict[str, l
     return {label_column: labels, **columns}
 
 
-def _render_overview(result: AnalysisResult) -> None:
+def _render_overview(result: AnalysisResult | HistoryAnalysisResult) -> None:
     """Zeige Eingabewerte und bereits berechnete Kennzahlen chronologisch."""
     pairs = tuple(zip(result.history.periods, result.metrics))
     rows = tuple(
@@ -276,7 +280,7 @@ def _render_overview(result: AnalysisResult) -> None:
     )
 
 
-def _render_comparisons(result: AnalysisResult) -> None:
+def _render_comparisons(result: AnalysisResult | HistoryAnalysisResult) -> None:
     """Zeige ausschliesslich Felder der bestehenden PeriodComparison-Objekte."""
     columns: dict[str, list[str]] = {}
     for comparison in result.comparisons:
@@ -288,7 +292,7 @@ def _render_comparisons(result: AnalysisResult) -> None:
     st.table(
         _table_data([row[0] for row in _COMPARISON_ROWS], columns),
         hide_index=True, hide_header=False, border="horizontal",
-        alt="Wachstumsraten und Veränderungen aufeinanderfolgender Perioden",
+        alt="Wachstumsraten und Veränderungen ausgewählter Perioden",
     )
 
 
@@ -304,7 +308,7 @@ def _format_flag_threshold(flag: ResearchFlag) -> str:
     return f"{flag.threshold_operator} {value.replace('.', ',')}"
 
 
-def _render_research_flags(result: AnalysisResult, *, key_prefix: str = "") -> None:
+def _render_research_flags(result: AnalysisResult | HistoryAnalysisResult, *, key_prefix: str = "") -> None:
     """Zeige fertige Prüfpunkte mit Zahlen und Schwellen; keine Regelauswertung."""
     st.header("Research-Prüfpunkte")
     st.caption(
@@ -335,7 +339,7 @@ def _render_research_flags(result: AnalysisResult, *, key_prefix: str = "") -> N
                 )
 
 
-def _render_key_metrics(result: AnalysisResult) -> None:
+def _render_key_metrics(result: AnalysisResult | HistoryAnalysisResult) -> None:
     """Fünf aktuelle Kennzahlen und vorhandene Vergleichswerte neutral anzeigen."""
     period = result.history.periods[-1]
     metrics = result.metrics[-1]
@@ -343,8 +347,14 @@ def _render_key_metrics(result: AnalysisResult) -> None:
     st.header("Kennzahlenüberblick")
     st.caption(
         f"{period.period_label} · Geldbeträge in {format_currency_unit(period.currency, period.scale)} · "
-        f"Nettoverschuldung berechnet · Veränderung gegenüber {comparison.previous_period.period_label}"
+        f"Nettoverschuldung berechnet · Vergleich: {comparison.current_period.period_label} vs {comparison.previous_period.period_label}"
     )
+    delta_matches = period == comparison.current_period
+    if not delta_matches:
+        st.caption(
+            f"Karten zeigen {period.period_label}; keine Deltas, weil das gewählte Vergleichspaar "
+            f"{comparison.current_period.period_label} vs {comparison.previous_period.period_label} eine andere aktuelle Periode hat."
+        )
     definitions = (
         ("Umsatz", format_amount(period.revenue), comparison.revenue_growth, "percentage"),
         ("EBIT-Marge", format_percentage(metrics.ebit_margin), comparison.ebit_margin_change_bps, "bps"),
@@ -354,11 +364,11 @@ def _render_key_metrics(result: AnalysisResult) -> None:
     )
     with st.container(horizontal=True):
         for label, value, change, kind in definitions:
-            delta = None if change is None else 0 if change == 0 else _format_value(change, kind, signed=True)
+            delta = None if change is None or not delta_matches else 0 if change == 0 else _format_value(change, kind, signed=True)
             st.metric(label, value, delta, delta_color="off", delta_arrow="off", border=True, height="stretch")
 
 
-def _render_trend_analysis(result: AnalysisResult, *, key_prefix: str = "") -> None:
+def _render_trend_analysis(result: AnalysisResult | HistoryAnalysisResult, *, key_prefix: str = "") -> None:
     """Binde unabhängige Plotly-Figures ein; keine Finanzformeln in der Darstellung."""
     history = result.history
     metrics = dict(zip(history.periods, result.metrics, strict=True))
@@ -386,9 +396,12 @@ def _render_trend_analysis(result: AnalysisResult, *, key_prefix: str = "") -> N
         st.plotly_chart(create_working_capital_chart(history, metrics), key=f"{key_prefix}chart_working_capital", config=config, alt="Vorräte, Forderungen und operatives Working Capital im Verhältnis zum Umsatz")
 
 
-def _render_results(result: AnalysisResult, *, from_pdf: bool = False) -> None:
+def _render_results(
+    result: AnalysisResult | HistoryAnalysisResult, *, from_pdf: bool = False, from_history: bool = False,
+) -> None:
     first = result.history.periods[0]
     stand = (
+        "Stand: aufgelöste Finanzhistorie und aktuelle Periodenauswahl." if from_history else
         "Stand: zuletzt analysierte PDF-Prüfdaten. Änderungen erneut übernehmen und die PDF-Analyse starten."
         if from_pdf else
         "Stand: zuletzt berechnete Eingaben. Änderungen mit ‚Analyse berechnen‘ übernehmen."
@@ -396,29 +409,11 @@ def _render_results(result: AnalysisResult, *, from_pdf: bool = False) -> None:
     if result.observations:
         st.caption("Analyse aus bestätigten PDF-/Prüfeingaben. Änderungen im Prüfbereich erst erneut übernehmen.")
         with st.expander("Quellen und bestätigte Korrekturen"):
-            st.dataframe([
-                {
-                    "Kennzahl": item.canonical_metric,
-                    "Periode": item.period_label,
-                    "Extrahiert": item.original_value,
-                    "Rohwert": item.original_raw_value,
-                    "Bestätigt": item.confirmed_value,
-                    "Ursprüngliche Kennzahl": item.original_canonical_metric,
-                    "Ursprüngliche Periode": item.original_period_label,
-                    "Ursprüngliche Einheit": f"{item.original_currency or 'unbekannt'} / {item.original_scale or 'unbekannt'}",
-                    "Bestätigte Einheit": f"{item.currency} / {item.scale}",
-                    "Quelle": item.source_document or "Manuelle Ergänzung",
-                    "PDF-Seite": item.page_number,
-                    "Originalbezeichnung": item.reported_label,
-                    "Methode": item.extraction_method,
-                    "Quelltext": item.source_snippet,
-                    "Position": str(item.bbox) if item.bbox else None,
-                } for item in result.observations
-            ], hide_index=True, alt="Herkunft und Korrekturen der bestätigten Finanzwerte")
+            render_observation_audit(result.observations)
     st.caption(
         f"{first.company_name} · {stand}"
     )
-    key_prefix = "pdf_" if from_pdf else ""
+    key_prefix = "history_" if from_history else "pdf_" if from_pdf else ""
     _render_research_flags(result, key_prefix=key_prefix)
     _render_key_metrics(result)
     st.header("Finanzübersicht")
@@ -490,12 +485,12 @@ def render_home_page() -> None:
         st.session_state.setdefault(key, value)
     st.title("Research Update Assistant")
     st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 5B.2 – Getrennte Eingabewege und Kandidatenprüfung")
+    st.info("Aktueller Entwicklungsstand: Phase 6 – Mehrjährige Finanzhistorie")
     st.caption("Wähle einen Eingabeweg. PDF-Prüfung und manuelle Eingabe sind Alternativen und benötigen keine doppelte Erfassung.")
-    pdf_tab, manual_tab = st.tabs(
-        ["PDF-gestützte Analyse", "Manuelle Eingabe"], key="analysis_workflows", on_change="rerun",
+    pdf_tab, manual_tab, history_tab = st.tabs(
+        ["PDF-gestützte Analyse", "Manuelle Eingabe", "Finanzhistorie"], key="analysis_workflows", on_change="rerun",
     )
-    # Beide Bereiche bleiben gerendert, damit ein Tabwechsel keine Entwürfe
+    # Alle Bereiche bleiben gerendert, damit ein Tabwechsel keine Entwürfe
     # oder Bestätigungen löscht. Teure Extraktion und Berechnung sind separat
     # durch Upload-Signatur bzw. ausdrückliche Analyse-Buttons geschützt.
     with pdf_tab:
@@ -503,3 +498,9 @@ def render_home_page() -> None:
         _render_pdf_analysis()
     with manual_tab:
         _render_manual_analysis()
+
+    with history_tab:
+        render_history_section(
+            render_result=lambda result: _render_results(result, from_history=True),
+            render_overview=_render_overview,
+        )
