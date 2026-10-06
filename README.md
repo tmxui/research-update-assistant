@@ -11,7 +11,10 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 7 – Kompaktes Ergebnis-Update:** Eine zusätzliche Ansicht fasst
+**Phase 8A – Erwartungen und Surprise-Analyse:** Manuell erfasste
+Erwartungs-Snapshots können einem Results Update ausdrücklich zugeordnet
+werden. Die Ansicht zeigt Actual, Prior, Estimate und die neutrale numerische
+Abweichung. Eine zusätzliche Ansicht fasst
 bestätigte Resultate, Veränderungen, Research-Prüfpunkte, Trends und Quellen
 für das ausdrücklich gewählte Vergleichspaar zusammen. Mehrere Reports eines
 Unternehmens können in einer lokalen Historie zusammengeführt werden. Alle
@@ -25,7 +28,7 @@ zwei oder drei Perioden und zeigt eine chronologische Finanzübersicht sowie
 aufeinanderfolgende Periodenvergleiche. Eine unabhängige Regel-Engine erzeugt
 transparente Research-Prüfpunkte aus den bestehenden Phase-1-Berechnungen.
 Fünf Kennzahlenkarten und Plotly-Diagramme machen die vorhandenen Daten sichtbar.
-OCR, externe LLM/API-Extraktion, Consensus, Excel-Export
+OCR, externe LLM/API-Extraktion, externe Consensus-Anbieter, Excel-Export
 und Machine Learning sind noch nicht implementiert.
 
 ## Installation und Start (macOS / VS-Code-Terminal)
@@ -51,7 +54,8 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-7-Hinweis sowie die Tabs PDF-gestützte Analyse, Manuelle Eingabe und Finanzhistorie sehen. Beende den Server im Terminal mit `Ctrl+C`.
+Phase-8A-Hinweis sowie die Tabs PDF-gestützte Analyse, Manuelle Eingabe,
+Finanzhistorie und Erwartungen sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
 `.venv` enthält die Python-Pakete nur für dieses Projekt. Durch die Aktivierung
@@ -76,6 +80,40 @@ mit mehreren Quellen.
 Git und der GitHub-Remote sind eingerichtet. Phase 6 wurde nach dem lokalen
 Multi-Report-Test mit den konsolidierten Geberit-Abschlüssen 2025 und 2024
 fachlich freigegeben.
+
+## Erwartungen und Surprise-Analyse in Phase 8A
+
+Ein `ExpectationSnapshot` speichert eine manuell erfasste Erwartung für genau
+eine wirtschaftliche Zielperiode. Unternehmen, Stichtag und Periodendauer,
+Währung, Skalierung, Bezeichnung, Typ und `as_of_date` bleiben erhalten.
+Mehrere Snapshots dürfen dieselbe Zielperiode betreffen; im Ergebnis-Update ist
+höchstens einer ausdrücklich aktiv. Die Snapshots leben nur in der aktuellen
+Browser-Sitzung. Es gibt keine externe Consensus-API und keine proprietären
+Consensus-Daten in den Tests.
+
+Der Bereich **Erwartungen erfassen** verwendet bekannte, bereits analysierte
+Perioden und fragt nur die relevanten Schätzwerte ab. Leere Felder bleiben
+`None`. Die Eingabe einer EBIT-Marge erfolgt in Prozent, intern wird sie als
+Dezimalzahl gespeichert. Aus Umsatz- und EBIT-Schätzungen wird keine vermeintliche
+Consensus-Marge abgeleitet. Ausgewiesener Free Cashflow und ausgewiesene
+Nettoverschuldung bleiben ausdrücklich reported Kennzahlen.
+
+`compare_actual_to_expectation()` validiert Unternehmen, Zielperiode, Währung
+und Skalierung. Bei normalen Beträgen ist die absolute Surprise `Actual -
+Estimate`. Eine prozentuale Surprise wird nur bei positiver Schätzbasis und
+nichtnegativem Actual berechnet. Bei Schätzung null, negativer Basis oder
+Vorzeichenwechsel bleibt sie `None`; die absolute Differenz bleibt sichtbar.
+Margenabweichungen erscheinen als Prozentpunktdifferenz und Basispunkte,
+Leverage als Differenz in x. Es gibt keine wirtschaftliche Wertung dieser
+Richtungen.
+
+Mit aktivem Snapshot ergänzt **Abweichung zu Erwartungen** höchstens sieben
+Kennzahlen um Actual, Prior, YoY, Estimate und Surprise. Ohne Auswahl bleibt der
+Phase-7-Screen unverändert. Research-Prüfpunkte und wichtigste Veränderungen
+verwenden weiterhin ausschliesslich Actual vs Prior. Bezeichnung, Typ, Stand
+und optionale Notizen dokumentieren die manuelle Herkunft der Erwartung; es
+wird keine PDF-Quelle erfunden. Guidance, automatische Empfehlungen und eine
+Revision-Historie für Erwartungen gehören nicht zu Phase 8A.
 
 ## Kompaktes Ergebnis-Update in Phase 7
 
@@ -511,6 +549,9 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/analysis_selection.py`: Flexibler Trendzeitraum und genau ein ausgewähltes Vergleichspaar.
 - `src/research_update_assistant/results_update.py`: Testbarer Builder und unveränderliche Präsentationsmodelle für das Ergebnis-Update.
 - `src/research_update_assistant/results_update_ui.py`: Kompakte Headline-Karten, Veränderungen, Flags, Charts und Quellen.
+- `src/research_update_assistant/expectation_models.py`: Unveränderliche Erwartungs-Snapshots und Surprise-Ergebnisse.
+- `src/research_update_assistant/expectations.py`: Validierung und neutrale Actual-vs-Estimate-Berechnungen.
+- `src/research_update_assistant/expectations_ui.py`: Kompakte Erfassung, Auswahl und Herkunftsanzeige der Erwartungen.
 - `src/research_update_assistant/history_ui.py`: Lokaler Historienbereich, Konfliktprüfung und Periodenauswahl.
 - `src/research_update_assistant/source_ui.py`: Gemeinsame Anzeige der Provenance und Analystenkorrekturen.
 - `src/research_update_assistant/ui.py`: Manuelles Formular, Analyst-Dashboard und Ergebnistabellen, ohne Finanzformeln.

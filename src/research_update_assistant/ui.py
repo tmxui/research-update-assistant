@@ -12,6 +12,8 @@ from .charts import (
 )
 from .flag_config import FlagConfigError, load_flag_rules
 from .flags import ResearchFlag, generate_research_flags
+from .expectations import ExpectationCompatibilityError, compare_actual_to_expectation
+from .expectations_ui import render_expectation_entry, select_expectation
 from .formatting import (
     format_amount, format_basis_points, format_currency_unit,
     format_multiple, format_percentage,
@@ -461,7 +463,19 @@ def _render_results(
                     _select_page(page_number)
                 else:
                     _open_source(report_id, page_number)
-            render_results_update(snapshot, key_prefix=prefix, on_source=open_source)
+            expectation_comparison = None
+            expectation = select_expectation(comparison.current_period, key_prefix=prefix)
+            if expectation is not None:
+                try:
+                    expectation_comparison = compare_actual_to_expectation(
+                        comparison.current_period, comparison.current_metrics, expectation,
+                    )
+                except ExpectationCompatibilityError as error:
+                    st.error(f"Erwartung konnte nicht verglichen werden: {error}")
+            render_results_update(
+                snapshot, key_prefix=prefix, on_source=open_source,
+                expectation_comparison=expectation_comparison,
+            )
         except ValueError as error:
             st.error(f"Ergebnis-Update konnte nicht erstellt werden: {error}")
     with detail:
@@ -508,6 +522,16 @@ def _render_manual_analysis() -> None:
         _render_results(result)
 
 
+def _known_expectation_periods() -> tuple:
+    """Sammle analysierte Perioden dieser Sitzung für die kompakte Erfassung."""
+    periods = []
+    for key in ("manual_analysis_result", "pdf_analysis_result", "history_result"):
+        result = st.session_state.get(key)
+        if result is not None:
+            periods.extend(result.history.periods)
+    return tuple(periods)
+
+
 def render_home_page() -> None:
     """Zwei alternative Eingabewege führen zur selben Finanzanalyse."""
     st.set_page_config(page_title="Research Update Assistant", page_icon="📊", layout="wide")
@@ -515,15 +539,16 @@ def render_home_page() -> None:
         ("analysis_result", None), ("analysis_source", None),
         ("manual_analysis_result", None), ("pdf_ready_history", None),
         ("pdf_ready_observations", ()), ("pdf_analysis_result", None),
-        ("scale", "million"),
+        ("scale", "million"), ("expectation_snapshots", ()),
     ):
         st.session_state.setdefault(key, value)
     st.title("Research Update Assistant")
     st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 7 – Kompaktes Ergebnis-Update")
+    st.info("Aktueller Entwicklungsstand: Phase 8A – Erwartungen und Surprise-Analyse")
     st.caption("Wähle einen Eingabeweg. PDF-Prüfung und manuelle Eingabe sind Alternativen und benötigen keine doppelte Erfassung.")
-    pdf_tab, manual_tab, history_tab = st.tabs(
-        ["PDF-gestützte Analyse", "Manuelle Eingabe", "Finanzhistorie"], key="analysis_workflows", on_change="rerun",
+    pdf_tab, manual_tab, history_tab, expectations_tab = st.tabs(
+        ["PDF-gestützte Analyse", "Manuelle Eingabe", "Finanzhistorie", "Erwartungen"],
+        key="analysis_workflows", on_change="rerun",
     )
     # Alle Bereiche bleiben gerendert, damit ein Tabwechsel keine Entwürfe
     # oder Bestätigungen löscht. Teure Extraktion und Berechnung sind separat
@@ -539,3 +564,6 @@ def render_home_page() -> None:
             render_result=lambda result: _render_results(result, from_history=True),
             render_overview=_render_overview,
         )
+
+    with expectations_tab:
+        render_expectation_entry(_known_expectation_periods())

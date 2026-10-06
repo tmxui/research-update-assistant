@@ -10,7 +10,12 @@ import streamlit as st
 
 from .charts import create_cashflow_chart, create_margin_chart, create_revenue_chart
 from .flags import ResearchFlag
-from .formatting import format_currency_unit, format_money
+from .expectation_models import ExpectationComparison, MetricSurprise
+from .expectations_ui import expectation_source_label
+from .formatting import (
+    format_amount, format_basis_points, format_currency_unit, format_money,
+    format_multiple, format_percentage,
+)
 from .results_update import ResultsUpdateSnapshot, SourceReference
 
 
@@ -28,6 +33,24 @@ _INPUT_LABELS = {
 _DERIVED_METRICS = (
     "ebit_margin", "calculated_free_cash_flow", "calculated_net_debt",
     "calculated_net_debt_to_ebitda",
+)
+_EXPECTATION_LABELS = {
+    "revenue": "Umsatz",
+    "ebitda": "EBITDA",
+    "ebit": "EBIT",
+    "ebit_margin": "EBIT-Marge",
+    "net_income": "Nettoergebnis",
+    "basic_eps": "Unverwässertes EPS",
+    "diluted_eps": "Verwässertes EPS",
+    "operating_cash_flow": "Operativer Cashflow",
+    "reported_free_cash_flow": "Ausgewiesener FCF",
+    "reported_net_debt": "Ausgewiesene Nettoverschuldung",
+    "calculated_net_debt_to_ebitda": "Net Debt / EBITDA (berechnet)",
+}
+_EXPECTATION_PRIORITY = (
+    "revenue", "ebitda", "ebit", "ebit_margin", "net_income", "basic_eps",
+    "diluted_eps", "reported_free_cash_flow", "operating_cash_flow",
+    "reported_net_debt", "calculated_net_debt_to_ebitda",
 )
 
 
@@ -61,6 +84,93 @@ def _render_changes(snapshot: ResultsUpdateSnapshot, key_prefix: str) -> None:
             st.text(change.text)
         if not snapshot.key_changes:
             st.caption("Keine berechenbaren Veränderungen für das gewählte Vergleichspaar.")
+
+
+def _expectation_value(
+    surprise: MetricSurprise,
+    value: float | None,
+    snapshot: ResultsUpdateSnapshot,
+) -> str:
+    if surprise.change_type == "margin":
+        return format_percentage(value)
+    if surprise.change_type == "multiple":
+        return format_multiple(value)
+    if surprise.canonical_metric in ("basic_eps", "diluted_eps"):
+        return "–" if value is None else f"{snapshot.current_period.currency} {format_amount(value)} / Aktie"
+    return format_money(value, snapshot.current_period.currency, snapshot.current_period.scale)
+
+
+def _prior_value(surprise: MetricSurprise, snapshot: ResultsUpdateSnapshot) -> float | None:
+    metric = surprise.canonical_metric
+    if hasattr(snapshot.base_period, metric):
+        return getattr(snapshot.base_period, metric)
+    for period, metrics in zip(snapshot.trend_periods, snapshot.trend_metrics, strict=True):
+        if period == snapshot.base_period and hasattr(metrics, metric):
+            return getattr(metrics, metric)
+    return None
+
+
+def _surprise_value(surprise: MetricSurprise, snapshot: ResultsUpdateSnapshot) -> str:
+    if surprise.change_type == "margin":
+        return format_basis_points(surprise.surprise_bps)
+    if surprise.change_type == "multiple":
+        return format_multiple(surprise.surprise_absolute, signed=True)
+    if surprise.surprise_percent is not None:
+        return format_percentage(surprise.surprise_percent, signed=True)
+    if surprise.surprise_absolute is None:
+        return "–"
+    if surprise.canonical_metric in ("basic_eps", "diluted_eps"):
+        return f"{surprise.surprise_absolute:+.2f} {snapshot.current_period.currency} / Aktie"
+    amount = format_money(
+        abs(surprise.surprise_absolute), snapshot.current_period.currency,
+        snapshot.current_period.scale,
+    )
+    sign = "+" if surprise.surprise_absolute > 0 else "−" if surprise.surprise_absolute < 0 else ""
+    return f"{sign}{amount}"
+
+
+def _render_expectations(
+    snapshot: ResultsUpdateSnapshot,
+    comparison: ExpectationComparison,
+    key_prefix: str,
+) -> None:
+    """Zeige nur vorberechnete Surprises; hier entstehen keine Finanzformeln."""
+    by_metric = {item.canonical_metric: item for item in comparison.metric_surprises}
+    headline = {item.metric_id: item for item in snapshot.headline_metrics}
+    rows = []
+    for metric in _EXPECTATION_PRIORITY:
+        surprise = by_metric.get(metric)
+        if surprise is None or surprise.estimate_value is None or surprise.actual_value is None:
+            continue
+        rows.append({
+            "Kennzahl": _EXPECTATION_LABELS[metric],
+            "Actual": _expectation_value(surprise, surprise.actual_value, snapshot),
+            "Prior": _expectation_value(surprise, _prior_value(surprise, snapshot), snapshot),
+            "YoY": headline[metric].formatted_delta if metric in headline else "–",
+            "Estimate": _expectation_value(surprise, surprise.estimate_value, snapshot),
+            "Surprise": _surprise_value(surprise, snapshot),
+        })
+        if len(rows) == 7:
+            break
+
+    st.subheader("Abweichung zu Erwartungen")
+    expectation = comparison.expectation
+    st.caption(
+        f"{expectation.label} · {expectation_source_label(expectation.source_type)} · "
+        f"Stand {expectation.as_of_date.strftime('%d.%m.%Y')}"
+    )
+    if rows:
+        st.dataframe(
+            rows, hide_index=True, key=f"{key_prefix}expectations_table",
+            alt="Actuals, Vorjahreswerte und neutrale Abweichungen zur ausgewählten Erwartung",
+        )
+    else:
+        st.caption("Im ausgewählten Snapshot sind keine vergleichbaren Schätzwerte vorhanden.")
+    with st.expander("Herkunft der Erwartungen"):
+        st.text(f"Bezeichnung: {expectation.label}")
+        st.text(f"Typ: {expectation_source_label(expectation.source_type)}")
+        st.text(f"Stand: {expectation.as_of_date.isoformat()}")
+        st.text(f"Notizen: {expectation.notes or '–'}")
 
 
 def _render_flag(flag: ResearchFlag, index: int, key_prefix: str) -> None:
@@ -179,6 +289,7 @@ def _render_sources(snapshot: ResultsUpdateSnapshot, key_prefix: str, on_source:
 
 def render_results_update(
     snapshot: ResultsUpdateSnapshot, *, key_prefix: str, on_source: SourceCallback | None = None,
+    expectation_comparison: ExpectationComparison | None = None,
 ) -> None:
     """Zeige maximal sieben Karten, sieben Änderungen und drei bestehende Charts.
 
@@ -197,6 +308,8 @@ def render_results_update(
         label = _INPUT_LABELS.get(conflict.canonical_metric, conflict.canonical_metric)
         st.warning(f"{conflict.period_label} · {label}: {conflict.message}")
     _render_headlines(snapshot, key_prefix)
+    if expectation_comparison is not None:
+        _render_expectations(snapshot, expectation_comparison, key_prefix)
     _render_changes(snapshot, key_prefix)
     _render_flags(snapshot, key_prefix)
     _render_context(snapshot, key_prefix)
