@@ -120,7 +120,8 @@ def test_pdf_start_reaches_dashboard_without_manual_inputs_using_shared_engine(m
     assert result.metrics[-1].ebit_margin == pytest.approx(143 / 1100)
     assert result.comparisons[0].ebit_margin_change_bps == pytest.approx(-200)
     assert result.observations and all(item.source_document == "synthetic.pdf" for item in result.observations)
-    assert _tab(app, "PDF-gestützte Analyse").metric[0].value == "1'100"
+    detail = next(tab for tab in app.get_by_key("pdf_analysis_views").tabs if tab.label == "Detailanalyse")
+    assert detail.metric[0].value == "1'100"
     assert _tab(app, "PDF-gestützte Analyse").get("plotly_chart")
     assert "Stand: zuletzt analysierte PDF-Prüfdaten." in _text(_tab(app, "PDF-gestützte Analyse"))
     assert not _tab(app, "Manuelle Eingabe").get("plotly_chart")

@@ -294,21 +294,23 @@ def render_history_section(
         st.warning("Offene Kennzahlen werden als nicht verfügbar behandelt: " + ", ".join(
             f"{labels[str(r.period_key)]} – {_metric_names().get(r.canonical_metric, r.canonical_metric)}" for r in open_items
         ))
-    st.dataframe([
-        {"Periode": p.period_label, "Stichtag": p.period_end.isoformat(), "Monate": p.period_months,
-         "Status": "⚠ Konflikt" if period_key(p) in conflict_periods else "Bestätigte Werte verfügbar"}
-        for p in history.periods
-    ], hide_index=True, alt="Alle gespeicherten Finanzperioden mit Stichtag und Konfliktstatus")
-    with st.expander("Historientabelle – alle verfügbaren Perioden", expanded=True):
+    result = _render_selection(history)
+    if result is not None:
+        render_result(result)
+    # Vollständige Tabellen und die Historienverwaltung bleiben erreichbar,
+    # stehen aber nicht vor dem kompakten Ergebnis-Update.
+    with st.expander("Historientabelle – alle verfügbaren Perioden"):
+        st.dataframe([
+            {"Periode": p.period_label, "Stichtag": p.period_end.isoformat(), "Monate": p.period_months,
+             "Status": "⚠ Konflikt" if period_key(p) in conflict_periods else "Bestätigte Werte verfügbar"}
+            for p in history.periods
+        ], hide_index=True, alt="Alle gespeicherten Finanzperioden mit Stichtag und Konfliktstatus")
         render_overview(HistoryAnalysisResult(
             history, tuple(calculate_period_metrics(p) for p in history.periods), (), (),
         ))
     _render_conflicts(workspace, labels)
     _render_history_audit(workspace, labels)
     _render_source_browser()
-    result = _render_selection(history)
-    if result is not None:
-        render_result(result)
     with st.expander("Finanzhistorie zurücksetzen"):
         confirmed = st.checkbox("Ich möchte die gesamte Finanzhistorie dieser Sitzung löschen", key="history_reset_confirm")
         st.button("Finanzhistorie zurücksetzen", key="history_reset", disabled=not confirmed, on_click=_reset_history)

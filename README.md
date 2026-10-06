@@ -11,7 +11,9 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 6 – Mehrjährige Finanzhistorie:** Mehrere bestätigte Reports eines
+**Phase 7 – Kompaktes Ergebnis-Update:** Eine zusätzliche Ansicht fasst
+bestätigte Resultate, Veränderungen, Research-Prüfpunkte, Trends und Quellen
+für das ausdrücklich gewählte Vergleichspaar zusammen. Mehrere Reports eines
 Unternehmens können in einer lokalen Historie zusammengeführt werden. Alle
 Quellen bleiben erhalten; abweichende Werte erfordern eine Quellenauswahl.
 Trendzeitraum und Vergleichspaar sind unabhängig wählbar. PDFs liefern
@@ -49,7 +51,7 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-6-Hinweis sowie die Tabs PDF-gestützte Analyse, Manuelle Eingabe und Finanzhistorie sehen. Beende den Server im Terminal mit `Ctrl+C`.
+Phase-7-Hinweis sowie die Tabs PDF-gestützte Analyse, Manuelle Eingabe und Finanzhistorie sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
 `.venv` enthält die Python-Pakete nur für dieses Projekt. Durch die Aktivierung
@@ -74,6 +76,60 @@ mit mehreren Quellen.
 Git und der GitHub-Remote sind eingerichtet. Phase 6 wurde nach dem lokalen
 Multi-Report-Test mit den konsolidierten Geberit-Abschlüssen 2025 und 2024
 fachlich freigegeben.
+
+## Kompaktes Ergebnis-Update in Phase 7
+
+Nach einer PDF- oder Historienanalyse stehen **Ergebnis-Update** und
+**Detailanalyse** nebeneinander. Das Ergebnis-Update zeigt Actual vs Prior:
+aktuelle bestätigte Resultate und ihren Vergleich mit der ausdrücklich
+gewählten Basisperiode. Die bestehenden Tabellen und vollständigen Charts
+bleiben in der Detailanalyse erhalten; die manuelle Eingabe bleibt unabhängig.
+
+Oben erscheinen höchstens sieben verfügbare Headline-Kennzahlen: Umsatz,
+EBITDA (sonst EBIT), EBIT-Marge, operativer Cashflow, FCF, Nettoverschuldung und
+Net Debt / EBITDA. Fehlende Werte erzeugen keine Null-Karte; echte Nullwerte
+bleiben sichtbar. Prozentveränderungen benötigen einen positiven Basiswert.
+Margenänderungen werden in Basispunkten, Leverage-Differenzen in x angezeigt.
+Alle Karten-Deltas sind neutral gefärbt.
+
+FCF bevorzugt **Ausgewiesener FCF**, falls dieser vorhanden ist, andernfalls
+**Berechneter FCF**. Vergleich und Delta verwenden immer dieselbe Definition;
+ein fehlender reported-Vergleich wird nicht durch calculated FCF ersetzt.
+Die Nettoverschuldungskarte ist ausdrücklich als ausgewiesen oder berechnet
+bezeichnet. Leverage verwendet ausschliesslich die vorberechnete Kennzahl
+`calculated_net_debt_to_ebitda` der Finance-Schicht: berechnete Nettoverschuldung
+aus Bruttoschulden minus liquiden Mitteln, geteilt durch Jahres-EBITDA.
+Ist nur ausgewiesene Nettoverschuldung verfügbar, erscheint diese Karte,
+aber keine Net-Debt/EBITDA-Karte. Phase 7 bildet keinen Ersatz-Ratio aus dem
+reported-Wert. Eine offene Quellenabweichung ist kein Anlass, still zur
+anderen Definition zu wechseln.
+
+**Wichtigste Veränderungen** enthält höchstens sieben deterministische
+Zahlenzeilen. Die Grundreihenfolge ist Umsatz, Ergebnis/Marge, Cashflow,
+Leverage und Working Capital. Kennzahlen mit vorhandenen Research-Prüfpunkten
+können höher priorisiert werden. Es gibt keine erzeugte Interpretation.
+**Research-Prüfpunkte** übernimmt die vorhandenen Flags des Vergleichspaars,
+sortiert Rot vor Gelb vor Grün. Zunächst sind höchstens fünf sichtbar;
+weitere stehen unter **Alle Prüfpunkte anzeigen**. Es gibt keinen Gesamtscore.
+
+**Historischer Kontext** verwendet bis zu drei kompakte bestehende Charts
+für Umsatz, Margen und Cashflow. Die Zahl der Trendperioden ist weiterhin
+flexibel. Ein Fünfjahrestrend kann beispielsweise gleichzeitig mit einem
+Vergleich FY2023 gegen FY2024 angezeigt werden: Karten, Deltas und Flags
+beziehen sich dann auf FY2024; FY2025 bleibt lediglich Teil des Trends.
+
+Der Expander **Quellen** zeigt die Belege für Headline-Werte und deren
+Vergleichsbasis. Für berechnete Kennzahlen werden die Eingangsgrössen als
+Quellen gezeigt, ohne einen berechneten Wert als PDF-Zitat auszugeben.
+Ausgewählte und äquivalente Quellen sowie Alternativen bleiben nachvollziehbar
+und über den bestehenden Seitenbrowser prüfbar. Manuelle Werte erhalten keine
+erfundene PDF-Herkunft. Offene Konflikte werden als **Historischer Wert
+ungeklärt** markiert; betroffene Werte oder Deltas werden nicht still verwendet.
+
+`build_results_update()` erzeugt ein unveränderliches Präsentationsmodell aus
+vorhandenen Perioden, Metrics, Comparison, Flags und Quellen. Es implementiert
+keine neuen Finanzformeln und ist unabhängig von Streamlit. Es gibt weiterhin
+keinen Consensus, keine Guidance, kein LLM und keine Investment-Empfehlungen.
 
 ## Mehrjährige Finanzhistorie in Phase 6
 
@@ -453,6 +509,8 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/history.py`: Chronologische Historie ohne Konfliktauflösung.
 - `src/research_update_assistant/history_workspace.py`: Report-Snapshots, Observations, Rundungsprüfung und Quellenauflösung.
 - `src/research_update_assistant/analysis_selection.py`: Flexibler Trendzeitraum und genau ein ausgewähltes Vergleichspaar.
+- `src/research_update_assistant/results_update.py`: Testbarer Builder und unveränderliche Präsentationsmodelle für das Ergebnis-Update.
+- `src/research_update_assistant/results_update_ui.py`: Kompakte Headline-Karten, Veränderungen, Flags, Charts und Quellen.
 - `src/research_update_assistant/history_ui.py`: Lokaler Historienbereich, Konfliktprüfung und Periodenauswahl.
 - `src/research_update_assistant/source_ui.py`: Gemeinsame Anzeige der Provenance und Analystenkorrekturen.
 - `src/research_update_assistant/ui.py`: Manuelles Formular, Analyst-Dashboard und Ergebnistabellen, ohne Finanzformeln.

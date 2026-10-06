@@ -18,14 +18,16 @@ from .formatting import (
 )
 from .history import FinancialHistory
 from .analysis_selection import HistoryAnalysisResult
-from .history_ui import render_history_addition, render_history_section
+from .history_ui import _open_source, render_history_addition, render_history_section
 from .source_ui import render_observation_audit
+from .results_update import build_results_update
+from .results_update_ui import render_results_update
 from .input_parsing import (
     CURRENCIES, FINANCIAL_INPUT_GROUPS, SCALE_OPTIONS,
     InputValidationError, ManualPeriodInput, create_manual_history,
 )
 from .models import CalculatedPeriodMetrics, PeriodComparison
-from .pdf_ui import render_pdf_section
+from .pdf_ui import _select_page, render_pdf_section
 from .sample_data import load_synthetic_history
 from .validation import ConfirmedMetricObservation
 
@@ -396,7 +398,7 @@ def _render_trend_analysis(result: AnalysisResult | HistoryAnalysisResult, *, ke
         st.plotly_chart(create_working_capital_chart(history, metrics), key=f"{key_prefix}chart_working_capital", config=config, alt="Vorräte, Forderungen und operatives Working Capital im Verhältnis zum Umsatz")
 
 
-def _render_results(
+def _render_detail_results(
     result: AnalysisResult | HistoryAnalysisResult, *, from_pdf: bool = False, from_history: bool = False,
 ) -> None:
     first = result.history.periods[0]
@@ -431,6 +433,39 @@ def _render_results(
     _render_comparisons(result)
     if any(period.period_months != 12 for period in result.history.periods):
         st.caption("Net Debt / EBITDA wird für Perioden ohne zwölf Monate nicht berechnet.")
+
+
+def _render_results(
+    result: AnalysisResult | HistoryAnalysisResult, *, from_pdf: bool = False, from_history: bool = False,
+) -> None:
+    """Kompaktes Ergebnis-Update und unveränderte Detailanalyse getrennt zeigen."""
+    if not (from_pdf or from_history):
+        _render_detail_results(result)
+        return
+    prefix = "history_" if from_history else "pdf_"
+    compact, detail = st.tabs(
+        ["Ergebnis-Update", "Detailanalyse"], key=f"{prefix}analysis_views", on_change="rerun",
+    )
+    with compact:
+        workspace = st.session_state.get("history_workspace") if from_history else None
+        comparison = result.comparisons[-1]
+        flags = result.research_flags[-1] if result.research_flags else ()
+        try:
+            snapshot = build_results_update(
+                result.history, result.metrics, comparison, flags,
+                resolutions=workspace.resolutions if workspace is not None else (),
+                observations=result.observations, flag_error=result.flag_error,
+            )
+            def open_source(report_id: str | None, page_number: int) -> None:
+                if report_id is None:
+                    _select_page(page_number)
+                else:
+                    _open_source(report_id, page_number)
+            render_results_update(snapshot, key_prefix=prefix, on_source=open_source)
+        except ValueError as error:
+            st.error(f"Ergebnis-Update konnte nicht erstellt werden: {error}")
+    with detail:
+        _render_detail_results(result, from_pdf=from_pdf, from_history=from_history)
 
 
 def _render_manual_analysis() -> None:
@@ -485,7 +520,7 @@ def render_home_page() -> None:
         st.session_state.setdefault(key, value)
     st.title("Research Update Assistant")
     st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 6 – Mehrjährige Finanzhistorie")
+    st.info("Aktueller Entwicklungsstand: Phase 7 – Kompaktes Ergebnis-Update")
     st.caption("Wähle einen Eingabeweg. PDF-Prüfung und manuelle Eingabe sind Alternativen und benötigen keine doppelte Erfassung.")
     pdf_tab, manual_tab, history_tab = st.tabs(
         ["PDF-gestützte Analyse", "Manuelle Eingabe", "Finanzhistorie"], key="analysis_workflows", on_change="rerun",

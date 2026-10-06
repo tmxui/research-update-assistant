@@ -81,7 +81,8 @@ def test_correction_audit_and_existing_dashboard_then_manual_regression():
     assert observation.original_value == 143 and observation.confirmed_value == 145
     assert observation.page_number == 1 and observation.source_document == "synthetic.pdf"
     assert len(app.get("plotly_chart")) > 0
-    assert app.metric[0].value == "1'100"
+    detail = next(tab for tab in app.get_by_key("pdf_analysis_views").tabs if tab.label == "Detailanalyse")
+    assert detail.metric[0].value == "1'100"
     app.selectbox(key="period_count").select(3).run()
     app.button(key="load_examples").click().run()
     app.button(key="calculate_analysis").click().run()
