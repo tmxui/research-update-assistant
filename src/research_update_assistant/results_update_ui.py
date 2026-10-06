@@ -12,6 +12,8 @@ from .charts import create_cashflow_chart, create_margin_chart, create_revenue_c
 from .flags import ResearchFlag
 from .expectation_models import ExpectationComparison, MetricSurprise
 from .expectations_ui import expectation_source_label
+from .guidance_models import ActualGuidanceComparison, GuidanceSnapshotComparison
+from .guidance_results_ui import render_guidance_block
 from .formatting import (
     format_amount, format_basis_points, format_currency_unit, format_money,
     format_multiple, format_percentage,
@@ -290,6 +292,8 @@ def _render_sources(snapshot: ResultsUpdateSnapshot, key_prefix: str, on_source:
 def render_results_update(
     snapshot: ResultsUpdateSnapshot, *, key_prefix: str, on_source: SourceCallback | None = None,
     expectation_comparison: ExpectationComparison | None = None,
+    guidance_comparison: ActualGuidanceComparison | None = None,
+    guidance_history_comparison: GuidanceSnapshotComparison | None = None,
 ) -> None:
     """Zeige maximal sieben Karten, sieben Änderungen und drei bestehende Charts.
 
@@ -310,6 +314,10 @@ def render_results_update(
     _render_headlines(snapshot, key_prefix)
     if expectation_comparison is not None:
         _render_expectations(snapshot, expectation_comparison, key_prefix)
+    if guidance_comparison is not None:
+        render_guidance_block(
+            guidance_comparison, guidance_history_comparison, key_prefix=key_prefix,
+        )
     _render_changes(snapshot, key_prefix)
     _render_flags(snapshot, key_prefix)
     _render_context(snapshot, key_prefix)

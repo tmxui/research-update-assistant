@@ -14,6 +14,10 @@ from .flag_config import FlagConfigError, load_flag_rules
 from .flags import ResearchFlag, generate_research_flags
 from .expectations import ExpectationCompatibilityError, compare_actual_to_expectation
 from .expectations_ui import render_expectation_entry, select_expectation
+from .guidance import (
+    GuidanceCompatibilityError, compare_actual_to_guidance, compare_guidance_snapshots,
+)
+from .guidance_ui import render_guidance_entry, select_guidance
 from .formatting import (
     format_amount, format_basis_points, format_currency_unit,
     format_multiple, format_percentage,
@@ -472,9 +476,28 @@ def _render_results(
                     )
                 except ExpectationCompatibilityError as error:
                     st.error(f"Erwartung konnte nicht verglichen werden: {error}")
+            guidance_comparison = None
+            guidance_history_comparison = None
+            guidance, previous_guidance = select_guidance(
+                comparison.current_period, key_prefix=prefix,
+            )
+            if guidance is not None:
+                try:
+                    guidance_comparison = compare_actual_to_guidance(
+                        comparison.current_period, comparison.current_metrics, guidance,
+                        period_comparison=comparison,
+                    )
+                    if previous_guidance is not None:
+                        guidance_history_comparison = compare_guidance_snapshots(
+                            guidance, previous_guidance,
+                        )
+                except GuidanceCompatibilityError as error:
+                    st.error(f"Guidance konnte nicht verglichen werden: {error}")
             render_results_update(
                 snapshot, key_prefix=prefix, on_source=open_source,
                 expectation_comparison=expectation_comparison,
+                guidance_comparison=guidance_comparison,
+                guidance_history_comparison=guidance_history_comparison,
             )
         except ValueError as error:
             st.error(f"Ergebnis-Update konnte nicht erstellt werden: {error}")
@@ -522,8 +545,8 @@ def _render_manual_analysis() -> None:
         _render_results(result)
 
 
-def _known_expectation_periods() -> tuple:
-    """Sammle analysierte Perioden dieser Sitzung für die kompakte Erfassung."""
+def _known_entry_periods() -> tuple:
+    """Sammle analysierte Perioden dieser Sitzung für Zusatzinformationen."""
     periods = []
     for key in ("manual_analysis_result", "pdf_analysis_result", "history_result"):
         result = st.session_state.get(key)
@@ -540,14 +563,18 @@ def render_home_page() -> None:
         ("manual_analysis_result", None), ("pdf_ready_history", None),
         ("pdf_ready_observations", ()), ("pdf_analysis_result", None),
         ("scale", "million"), ("expectation_snapshots", ()),
+        ("guidance_snapshots", ()),
     ):
         st.session_state.setdefault(key, value)
     st.title("Research Update Assistant")
     st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 8A – Erwartungen und Surprise-Analyse")
+    st.info("Aktueller Entwicklungsstand: Phase 8B – Guidance Tracker")
     st.caption("Wähle einen Eingabeweg. PDF-Prüfung und manuelle Eingabe sind Alternativen und benötigen keine doppelte Erfassung.")
-    pdf_tab, manual_tab, history_tab, expectations_tab = st.tabs(
-        ["PDF-gestützte Analyse", "Manuelle Eingabe", "Finanzhistorie", "Erwartungen"],
+    pdf_tab, manual_tab, history_tab, expectations_tab, guidance_tab = st.tabs(
+        [
+            "PDF-gestützte Analyse", "Manuelle Eingabe", "Finanzhistorie",
+            "Erwartungen", "Guidance",
+        ],
         key="analysis_workflows", on_change="rerun",
     )
     # Alle Bereiche bleiben gerendert, damit ein Tabwechsel keine Entwürfe
@@ -566,4 +593,7 @@ def render_home_page() -> None:
         )
 
     with expectations_tab:
-        render_expectation_entry(_known_expectation_periods())
+        render_expectation_entry(_known_entry_periods())
+
+    with guidance_tab:
+        render_guidance_entry(_known_entry_periods())

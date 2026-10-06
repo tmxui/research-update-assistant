@@ -11,10 +11,11 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 8A – Erwartungen und Surprise-Analyse:** Manuell erfasste
-Erwartungs-Snapshots können einem Results Update ausdrücklich zugeordnet
-werden. Die Ansicht zeigt Actual, Prior, Estimate und die neutrale numerische
-Abweichung. Eine zusätzliche Ansicht fasst
+**Phase 8B – Guidance Tracker:** Manuell erfasste Unternehmens-Guidance bleibt
+als chronologische Folge eigenständiger Snapshots erhalten. Das Results Update
+zeigt Actual vs Guidance und mathematisch eindeutige Änderungen gegenüber dem
+vorherigen Guidance-Stand. Expectations bleiben davon strikt getrennt und
+können gleichzeitig angezeigt werden. Eine zusätzliche Ansicht fasst
 bestätigte Resultate, Veränderungen, Research-Prüfpunkte, Trends und Quellen
 für das ausdrücklich gewählte Vergleichspaar zusammen. Mehrere Reports eines
 Unternehmens können in einer lokalen Historie zusammengeführt werden. Alle
@@ -54,8 +55,8 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-8A-Hinweis sowie die Tabs PDF-gestützte Analyse, Manuelle Eingabe,
-Finanzhistorie und Erwartungen sehen. Beende den Server im Terminal mit `Ctrl+C`.
+Phase-8B-Hinweis sowie die Tabs PDF-gestützte Analyse, Manuelle Eingabe,
+Finanzhistorie, Erwartungen und Guidance sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
 `.venv` enthält die Python-Pakete nur für dieses Projekt. Durch die Aktivierung
@@ -80,6 +81,43 @@ mit mehreren Quellen.
 Git und der GitHub-Remote sind eingerichtet. Phase 6 wurde nach dem lokalen
 Multi-Report-Test mit den konsolidierten Geberit-Abschlüssen 2025 und 2024
 fachlich freigegeben.
+
+## Guidance Tracker in Phase 8B
+
+Ein `GuidanceSnapshot` dokumentiert eine Unternehmensaussage für eine
+wirtschaftliche Zielperiode. Unternehmen, Stichtag und Periodendauer, Währung,
+Skalierung, Stand, Anlass und Quelle bleiben erhalten. Dokumentname, PDF-Seite
+und Notizen sind optional und werden niemals erfunden. Mehrere Snapshots für
+dieselbe Zielperiode bilden die Guidance-Historie, etwa die FY2025-Guidance im
+Geschäftsbericht 2024 und ihre Aktualisierung bei H1 2025.
+
+Jedes `GuidanceItem` behält seine Aussageform: exakter oder ungefährer Wert,
+inklusive oder strikte Unter-/Obergrenze, Range oder qualitative Richtung.
+Eine Range von 4–6 % bleibt 4–6 %; sie wird nicht auf einen Mittelpunkt
+reduziert. Prozentwerte werden intern als Dezimalzahlen gespeichert. Fehlende
+Items bleiben fehlend und werden nicht als null ergänzt.
+
+`compare_guidance_snapshots()` vergleicht nur Snapshots desselben Unternehmens,
+derselben Zielperiode und Einheit. Eindeutige numerische Bewegungen werden als
+angehoben, gesenkt, eingeengt, ausgeweitet oder unverändert ausgewiesen. Eine
+Range kann mehrere Eigenschaften gleichzeitig ändern. Wechsel zwischen nicht
+direkt vergleichbaren Aussageformen oder qualitativen Richtungen erscheinen
+neutral als **geändert**.
+
+`compare_actual_to_guidance()` verwendet bestätigte Actuals und bereits
+berechnete Margen bzw. das bestehende Periodenwachstum. Exakte Werte,
+Mindest-/Höchstgrenzen und Ranges ergeben **innerhalb**, **über** oder **unter
+Guidance**. Ungefähre und qualitative Aussagen erhalten ohne definierte
+Toleranz keinen erfundenen numerischen Status. Der Results-Update-Block zeigt
+bei einem früheren Stand zusätzlich **Vorherige Guidance** und die eindeutige
+Änderung.
+
+Guidance ist eine Unternehmensaussage; Expectations sind externe oder eigene
+Schätzungen. Beide besitzen eigene Modelle, Auswahlfelder, Provenance und
+Vergleichsfunktionen. Research Flags und wichtigste Veränderungen verwenden
+weiterhin ausschliesslich Actual vs Prior. In Phase 8B gibt es keine
+automatische Guidance-Extraktion, kein NLP/LLM und keine externe API. Die
+Snapshots leben nur in der aktuellen Browser-Sitzung.
 
 ## Erwartungen und Surprise-Analyse in Phase 8A
 
@@ -112,8 +150,9 @@ Kennzahlen um Actual, Prior, YoY, Estimate und Surprise. Ohne Auswahl bleibt der
 Phase-7-Screen unverändert. Research-Prüfpunkte und wichtigste Veränderungen
 verwenden weiterhin ausschliesslich Actual vs Prior. Bezeichnung, Typ, Stand
 und optionale Notizen dokumentieren die manuelle Herkunft der Erwartung; es
-wird keine PDF-Quelle erfunden. Guidance, automatische Empfehlungen und eine
-Revision-Historie für Erwartungen gehören nicht zu Phase 8A.
+wird keine PDF-Quelle erfunden. Unternehmens-Guidance verwendet die separate
+Phase-8B-Struktur; automatische Empfehlungen und eine Revision-Historie für
+Erwartungen sind weiterhin nicht enthalten.
 
 ## Kompaktes Ergebnis-Update in Phase 7
 
@@ -166,8 +205,9 @@ ungeklärt** markiert; betroffene Werte oder Deltas werden nicht still verwendet
 
 `build_results_update()` erzeugt ein unveränderliches Präsentationsmodell aus
 vorhandenen Perioden, Metrics, Comparison, Flags und Quellen. Es implementiert
-keine neuen Finanzformeln und ist unabhängig von Streamlit. Es gibt weiterhin
-keinen Consensus, keine Guidance, kein LLM und keine Investment-Empfehlungen.
+keine neuen Finanzformeln und ist unabhängig von Streamlit. Die späteren
+Expectation- und Guidance-Module liefern ihm separat vorbereitete Vergleiche;
+es gibt kein LLM und keine Investment-Empfehlungen.
 
 ## Mehrjährige Finanzhistorie in Phase 6
 
@@ -552,6 +592,10 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/expectation_models.py`: Unveränderliche Erwartungs-Snapshots und Surprise-Ergebnisse.
 - `src/research_update_assistant/expectations.py`: Validierung und neutrale Actual-vs-Estimate-Berechnungen.
 - `src/research_update_assistant/expectations_ui.py`: Kompakte Erfassung, Auswahl und Herkunftsanzeige der Erwartungen.
+- `src/research_update_assistant/guidance_models.py`: Unveränderliche Guidance-Snapshots, Aussageformen und Vergleichsergebnisse.
+- `src/research_update_assistant/guidance.py`: Validierung, Guidance-Historienvergleich und Actual-vs-Guidance-Logik.
+- `src/research_update_assistant/guidance_ui.py`: Kompakte manuelle Erfassung und Auswahl von Guidance-Snapshots.
+- `src/research_update_assistant/guidance_results_ui.py`: Getrennter Guidance-Block im Ergebnis-Update.
 - `src/research_update_assistant/history_ui.py`: Lokaler Historienbereich, Konfliktprüfung und Periodenauswahl.
 - `src/research_update_assistant/source_ui.py`: Gemeinsame Anzeige der Provenance und Analystenkorrekturen.
 - `src/research_update_assistant/ui.py`: Manuelles Formular, Analyst-Dashboard und Ergebnistabellen, ohne Finanzformeln.
