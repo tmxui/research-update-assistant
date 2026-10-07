@@ -111,6 +111,7 @@ def test_replacing_same_filename_resets_page_and_search(synthetic_pdf_bytes):
     assert app.session_state["pdf_candidates"] == ()
     assert app.session_state["pdf_document"].possibly_scanned
     assert any("könnte gescannt sein" in warning.value for warning in app.warning)
+    assert any("keine zuverlässigen Kennzahlvorschläge" in warning.value for warning in app.warning)
 
 
 def test_invalid_upload_reports_error_and_manual_analysis_still_works(synthetic_pdf_bytes):

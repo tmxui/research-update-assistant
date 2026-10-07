@@ -69,8 +69,10 @@ def _calculate_manual(app: AppTest, count: int = 2) -> None:
 
 def test_workflow_tabs_keep_pdf_controls_and_manual_form_separate():
     app = _app(upload=False)
-    assert [tab.label for tab in app.tabs[:2]] == ["PDF-gestützte Analyse", "Manuelle Eingabe"]
-    pdf = _tab(app, "PDF-gestützte Analyse")
+    assert [tab.label for tab in app.tabs[:5]] == [
+        "PDF-Workflow", "Finanzhistorie", "Erwartungen", "Guidance", "Manuelle Eingabe",
+    ]
+    pdf = _tab(app, "PDF-Workflow")
     manual = _tab(app, "Manuelle Eingabe")
     assert pdf.file_uploader(key="pdf_upload")
     assert manual.button(key="calculate_analysis").label == "Analyse berechnen"
@@ -96,7 +98,7 @@ def test_pdf_acceptance_displays_summary_without_running_analysis(monkeypatch):
     assert app.session_state["manual_analysis_result"] is None
     assert calculator.call_count == comparator.call_count == 0
     assert not app.get("plotly_chart")
-    summary = _text(_tab(app, "PDF-gestützte Analyse"))
+    summary = _text(_tab(app, "PDF-Workflow"))
     for phrase in ("PDF-Daten bereit für Analyse", "PDF Company AG", "FY2024", "FY2025", "CHF", "Millionen"):
         assert phrase in summary
     assert re.search(r"(?:Bestätigte Kennzahlen:\s*2|2 bestätigte Kennzahlen)", summary)
@@ -122,8 +124,8 @@ def test_pdf_start_reaches_dashboard_without_manual_inputs_using_shared_engine(m
     assert result.observations and all(item.source_document == "synthetic.pdf" for item in result.observations)
     detail = next(tab for tab in app.get_by_key("pdf_analysis_views").tabs if tab.label == "Detailanalyse")
     assert detail.metric[0].value == "1'100"
-    assert _tab(app, "PDF-gestützte Analyse").get("plotly_chart")
-    assert "Stand: zuletzt analysierte PDF-Prüfdaten." in _text(_tab(app, "PDF-gestützte Analyse"))
+    assert _tab(app, "PDF-Workflow").get("plotly_chart")
+    assert "Stand: zuletzt analysierte PDF-Prüfdaten." in _text(_tab(app, "PDF-Workflow"))
     assert not _tab(app, "Manuelle Eingabe").get("plotly_chart")
     assert app.session_state["manual_analysis_result"] is None
     assert app.text_input(key="company_name").value == ""
@@ -142,7 +144,7 @@ def test_manual_examples_reach_only_manual_dashboard(count):
     assert result.metrics[-1].calculated_free_cash_flow == 60
     assert result.history.periods[-1].company_name == "Manual Company AG"
     assert result.observations == ()
-    assert not _tab(app, "PDF-gestützte Analyse").get("plotly_chart")
+    assert not _tab(app, "PDF-Workflow").get("plotly_chart")
     assert len(_tab(app, "Manuelle Eingabe").get("plotly_chart")) == 7
     manual_text = _text(_tab(app, "Manuelle Eingabe"))
     assert "Stand: zuletzt berechnete Eingaben." in manual_text
@@ -165,12 +167,12 @@ def test_both_workflows_keep_independent_results_when_both_dashboards_render():
     assert manual.history.periods[-1].company_name == "Manual Company AG"
     assert pdf.history.periods[-1].company_name == "PDF Company AG"
     assert len(manual.history.periods) == 3 and len(pdf.history.periods) == 2
-    assert _tab(app, "PDF-gestützte Analyse").get("plotly_chart")
+    assert _tab(app, "PDF-Workflow").get("plotly_chart")
     assert len(_tab(app, "Manuelle Eingabe").get("plotly_chart")) == 7
     assert app.text_input(key="company_name").value == "Manual Company AG"
     # AppTest stellt für Tabs keinen Auswahlsetter bereit. Der öffentliche
     # Widget-State bildet denselben gewählten Tab beim nächsten Aufbau ab.
-    for selected_tab in ("Manuelle Eingabe", "PDF-gestützte Analyse"):
+    for selected_tab in ("Manuelle Eingabe", "PDF-Workflow"):
         app.session_state["analysis_workflows"] = selected_tab
         app.run()
         assert not app.exception
@@ -211,7 +213,7 @@ def test_pdf_edits_invalidate_ready_snapshot_and_pdf_result_only(change):
     assert app.session_state["pdf_analysis_result"] is None
     assert app.session_state["manual_analysis_result"] is manual
     assert not any(button.key == "pdf_start_analysis" for button in app.button)
-    assert not _tab(app, "PDF-gestützte Analyse").get("plotly_chart")
+    assert not _tab(app, "PDF-Workflow").get("plotly_chart")
     assert len(_tab(app, "Manuelle Eingabe").get("plotly_chart")) == 7
 
 
@@ -234,7 +236,7 @@ def test_upload_changes_clear_pdf_snapshots_and_reviews_but_preserve_manual(repl
     assert not app.session_state.get("review_records", {})
     assert app.session_state["manual_analysis_result"] is manual
     assert app.text_input(key="company_name").value == "Manual Company AG"
-    assert not _tab(app, "PDF-gestützte Analyse").get("plotly_chart")
+    assert not _tab(app, "PDF-Workflow").get("plotly_chart")
     assert len(_tab(app, "Manuelle Eingabe").get("plotly_chart")) == 7
     if replacement == "same_filename":
         assert app.text_input(key="review_company").value == ""
@@ -290,7 +292,7 @@ def test_manual_additions_within_pdf_review_stay_in_pdf_workflow(monkeypatch):
     assert app.session_state["pdf_ready_history"] is not None
     assert all(item.source_document is None for item in app.session_state["pdf_ready_observations"])
     _start_pdf(app)
-    assert _tab(app, "PDF-gestützte Analyse").get("plotly_chart")
+    assert _tab(app, "PDF-Workflow").get("plotly_chart")
     assert not _tab(app, "Manuelle Eingabe").get("plotly_chart")
     assert app.session_state["manual_analysis_result"] is None
     assert app.text_input(key="company_name").value == ""

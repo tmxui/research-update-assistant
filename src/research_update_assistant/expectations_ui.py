@@ -53,8 +53,14 @@ def render_expectation_entry(periods: Sequence[FinancialPeriod]) -> None:
     available = unique_periods(periods)
     st.markdown("### Erwartungen erfassen")
     if not available:
-        st.caption("Sobald Finanzperioden analysiert wurden, können hier Erwartungen erfasst werden.")
+        st.info(
+            "Noch keine analysierte Periode vorhanden. Erstelle zuerst eine Analyse "
+            "im PDF-Workflow, in der Finanzhistorie oder über die manuelle Eingabe."
+        )
         return
+
+    if not st.session_state.get("expectation_snapshots"):
+        st.info("Für die verfügbaren Perioden wurden noch keine Erwartungen erfasst.")
 
     by_token = {_period_token(period): period for period in available}
     tokens = tuple(by_token)

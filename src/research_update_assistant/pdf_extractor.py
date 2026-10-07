@@ -20,7 +20,8 @@ from .document_models import (
 
 SCANNED_WARNING = (
     "Das PDF enthält wenig maschinenlesbaren Text und könnte gescannt sein. "
-    "Automatische Textextraktion ist für dieses Dokument möglicherweise unzuverlässig."
+    "Automatische Textextraktion ist für dieses Dokument möglicherweise unzuverlässig. "
+    "OCR wird derzeit nicht unterstützt; verwende wenn möglich eine textbasierte PDF-Version."
 )
 
 

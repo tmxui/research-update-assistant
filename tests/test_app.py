@@ -52,10 +52,21 @@ def test_app_starts_with_german_content() -> None:
     app = _new_app()
     assert not app.exception
     assert app.title[0].value == "Research Update Assistant"
-    assert app.markdown[0].value == "Strukturierte Auswertung von Unternehmensresultaten"
-    assert app.info[0].value == (
-        "Aktueller Entwicklungsstand: Phase 9 – Excel/CSV Export & Model Handoff"
+    assert app.markdown[0].value == (
+        "Extrahiert und validiert Finanzdaten aus Unternehmensberichten, baut eine "
+        "mehrjährige Historie auf und erstellt kompakte Ergebnis-Updates."
     )
+    captions = [item.value for item in app.caption]
+    assert any("Human-in-the-loop" in value for value in captions)
+    assert any("1. Bericht hochladen" in value and "6. Export" in value for value in captions)
+    assert [tab.label for tab in app.tabs[:5]] == [
+        "PDF-Workflow", "Finanzhistorie", "Erwartungen", "Guidance", "Manuelle Eingabe",
+    ]
+    info_messages = [item.value for item in app.info]
+    assert any("Noch kein Bericht geladen" in value for value in info_messages)
+    assert any("Noch keine Finanzhistorie vorhanden" in value for value in info_messages)
+    assert any("Noch keine analysierte Periode vorhanden" in value for value in info_messages)
+    assert not any("Entwicklungsstand" in value for value in info_messages)
     assert [item.value for item in app.subheader] == [
         "1. Unternehmensdaten", "2. Finanzperioden erfassen", "3. Daten prüfen",
     ]
@@ -65,6 +76,8 @@ def test_app_starts_with_german_content() -> None:
     assert app.selectbox(key="currency").value == "CHF"
     assert app.selectbox(key="scale").value == "million"
     assert not app.table
+    assert "Ergebnis-Update" not in [tab.label for tab in app.tabs]
+    assert not app.download_button
 
 
 def test_example_prefill_does_not_compute_until_submit(monkeypatch) -> None:
@@ -234,7 +247,8 @@ def test_research_flags_appear_only_after_analysis_and_show_latest_pair_first() 
     assert not app.exception
     assert not app.error
     assert [element.value for element in app.header] == [
-        "Geschäftsbericht einlesen", "Research-Prüfpunkte", "Kennzahlenüberblick", "Finanzübersicht", "Trendanalyse", "Periodenvergleich", "Finanzhistorie",
+        "Geschäftsbericht einlesen", "Finanzhistorie", "Research-Prüfpunkte",
+        "Kennzahlenüberblick", "Finanzübersicht", "Trendanalyse", "Periodenvergleich",
     ]
     assert [element.value for element in app.subheader][-2:] == ["FY2025 vs FY2024", "FY2024 vs FY2023"]
     result = app.session_state["analysis_result"]

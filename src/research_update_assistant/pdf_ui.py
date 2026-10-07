@@ -140,6 +140,10 @@ def render_pdf_section(on_accept: AcceptHistory) -> None:
     if uploaded is None:
         if st.session_state["pdf_signature"] is not None:
             _reset_document(None)
+        st.info(
+            "Noch kein Bericht geladen. Lade einen öffentlichen, textbasierten "
+            "Geschäfts- oder Ergebnisbericht als PDF hoch."
+        )
         return
     data = uploaded.getvalue()
     signature = (uploaded.name, sha256(data).hexdigest())
@@ -164,9 +168,15 @@ def render_pdf_section(on_accept: AcceptHistory) -> None:
     document = st.session_state["pdf_document"]
     if document is not None:
         _render_document_summary(document)
-        _render_search(document)
-        _render_page_browser(document)
+        with st.expander("Dokumentdetails und Seiten prüfen"):
+            _render_search(document)
+            _render_page_browser(document)
         if st.session_state.get("pdf_candidate_error"):
             st.error(st.session_state["pdf_candidate_error"])
         elif st.session_state.get("pdf_metric_config"):
+            if not st.session_state["pdf_candidates"]:
+                st.warning(
+                    "Es wurden keine zuverlässigen Kennzahlvorschläge gefunden. "
+                    "Prüfe die Textqualität und ergänze benötigte Werte im Prüfbereich manuell."
+                )
             render_validation_section(st.session_state["pdf_metric_config"], st.session_state["pdf_candidates"], _select_page, on_accept)

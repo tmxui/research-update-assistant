@@ -100,8 +100,14 @@ def render_guidance_entry(periods: Sequence[FinancialPeriod]) -> None:
     available = _unique_periods(periods)
     st.markdown("### Guidance erfassen")
     if not available:
-        st.caption("Sobald Finanzperioden analysiert wurden, kann hier Guidance erfasst werden.")
+        st.info(
+            "Noch keine analysierte Periode vorhanden. Erstelle zuerst eine Analyse, "
+            "bevor du Unternehmens-Guidance erfasst."
+        )
         return
+
+    if not st.session_state.get("guidance_snapshots"):
+        st.info("Für die verfügbaren Perioden wurde noch keine Guidance erfasst.")
 
     by_token = {_period_token(period): period for period in available}
     tokens = tuple(by_token)

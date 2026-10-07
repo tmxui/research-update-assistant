@@ -507,6 +507,10 @@ def _render_results(
 
 def _render_manual_analysis() -> None:
     """Behalte die manuelle Erfassung als eigenständigen Eingabeweg."""
+    st.caption(
+        "Alternative Eingabe ohne PDF: Erfasse zwei oder drei Perioden manuell "
+        "oder lade synthetische Beispieldaten."
+    )
     st.subheader("1. Unternehmensdaten")
     count = st.selectbox(
         "Anzahl Perioden", (2, 3), key="period_count", on_change=_clear_analysis,
@@ -556,7 +560,7 @@ def _known_entry_periods() -> tuple:
 
 
 def render_home_page() -> None:
-    """Zwei alternative Eingabewege führen zur selben Finanzanalyse."""
+    """Führe verständlich durch den Human-in-the-loop-Research-Workflow."""
     st.set_page_config(page_title="Research Update Assistant", page_icon="📊", layout="wide")
     for key, value in (
         ("analysis_result", None), ("analysis_source", None),
@@ -567,13 +571,29 @@ def render_home_page() -> None:
     ):
         st.session_state.setdefault(key, value)
     st.title("Research Update Assistant")
-    st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 9 – Excel/CSV Export & Model Handoff")
-    st.caption("Wähle einen Eingabeweg. PDF-Prüfung und manuelle Eingabe sind Alternativen und benötigen keine doppelte Erfassung.")
-    pdf_tab, manual_tab, history_tab, expectations_tab, guidance_tab = st.tabs(
+    st.markdown(
+        "Extrahiert und validiert Finanzdaten aus Unternehmensberichten, baut eine "
+        "mehrjährige Historie auf und erstellt kompakte Ergebnis-Updates."
+    )
+    st.caption(
+        "Human-in-the-loop: Du bestätigst jede übernommene Zahl. Quellen bleiben "
+        "nachvollziehbar. Die Anwendung erstellt keine Investment-Empfehlung."
+    )
+    with st.container(border=True):
+        st.markdown("**Empfohlener Ablauf**")
+        st.caption(
+            "1. Bericht hochladen  →  2. Finanzdaten prüfen  →  "
+            "3. Zur Historie hinzufügen  →  4. Ergebnis-Update ansehen  →  "
+            "5. Optional Erwartungen oder Guidance ergänzen  →  6. Export"
+        )
+    st.caption(
+        "Starte mit dem PDF-Workflow. Die manuelle Eingabe bleibt als alternative "
+        "Erfassung ohne Bericht verfügbar."
+    )
+    pdf_tab, history_tab, expectations_tab, guidance_tab, manual_tab = st.tabs(
         [
-            "PDF-gestützte Analyse", "Manuelle Eingabe", "Finanzhistorie",
-            "Erwartungen", "Guidance",
+            "PDF-Workflow", "Finanzhistorie", "Erwartungen", "Guidance",
+            "Manuelle Eingabe",
         ],
         key="analysis_workflows", on_change="rerun",
     )
@@ -583,9 +603,6 @@ def render_home_page() -> None:
     with pdf_tab:
         render_pdf_section(on_accept=_prepare_pdf_analysis)
         _render_pdf_analysis()
-    with manual_tab:
-        _render_manual_analysis()
-
     with history_tab:
         render_history_section(
             render_result=lambda result: _render_results(result, from_history=True),
@@ -597,3 +614,6 @@ def render_home_page() -> None:
 
     with guidance_tab:
         render_guidance_entry(_known_entry_periods())
+
+    with manual_tab:
+        _render_manual_analysis()

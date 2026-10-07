@@ -250,7 +250,7 @@ def _render_selection(history: FinancialHistory) -> HistoryAnalysisResult | None
     with right:
         current = st.selectbox("Aktuelle Periode", tuple(periods), format_func=labels.get, key="history_current_period")
     st.caption(f"Ausgewählter Vergleich: {labels[current]} vs {labels[previous]}.")
-    if st.button("Finanzhistorie analysieren", key="history_analyse", type="primary"):
+    if st.button("Ergebnis-Update erstellen", key="history_analyse", type="primary"):
         st.session_state["history_analysis_active"] = True
     if not st.session_state.get("history_analysis_active"):
         return None
@@ -276,7 +276,14 @@ def render_history_section(
     st.caption("Lokale Browser-Sitzung: Historie und Quellen gehen beim Schliessen der Sitzung oder Server-Neustart verloren.")
     workspace = st.session_state["history_workspace"]
     if workspace is None:
-        st.info("Bestätige einen Bericht im PDF-Workflow und wähle ‚Zur Finanzhistorie hinzufügen‘.")
+        st.info(
+            "Noch keine Finanzhistorie vorhanden. Bestätige einen Bericht im "
+            "PDF-Workflow und wähle ‚Zur Finanzhistorie hinzufügen‘."
+        )
+        st.caption(
+            "Ergebnis-Update und Export werden verfügbar, sobald mindestens ein "
+            "bestätigter Bericht zur Historie gehört."
+        )
         return
     history = workspace.to_financial_history()
     labels = {period_key(p): p.period_label for p in history.periods}
@@ -285,11 +292,11 @@ def render_history_section(
         f"Unternehmen: {workspace.company_name}\n"
         f"Verfügbare Perioden: {' / '.join(p.period_label for p in history.periods)}\n"
         f"Währung / Einheit: {workspace.currency} / {dict(SCALE_OPTIONS)[workspace.scale]}\n"
-        f"Berichte: {len(workspace.reports)} · Observations: {len(workspace.observations)}\n"
+        f"Berichte: {len(workspace.reports)}\n"
         f"Offene Konflikte: {len(open_items)}"
     )
     sources = sorted({o.confirmed.source_document or "Manuelle Eingabe" for o in workspace.observations})
-    st.text("Quellen: " + " / ".join(sources))
+    st.caption("Quellen: " + " / ".join(sources))
     conflict_periods = {str(r.period_key) for r in open_items}
     if open_items:
         st.warning("Offene Kennzahlen werden als nicht verfügbar behandelt: " + ", ".join(

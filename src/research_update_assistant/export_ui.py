@@ -5,8 +5,29 @@ import re
 
 import streamlit as st
 
+from .expectation_models import ExpectationSnapshot
 from .exports import ExportValidationError, create_excel_export, create_financial_history_csv
+from .guidance_models import GuidanceSnapshot
 from .history_workspace import HistoryWorkspace, PeriodKey
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def _create_export_payloads(
+    workspace: HistoryWorkspace,
+    selected: tuple[PeriodKey, ...],
+    expectations: tuple[ExpectationSnapshot, ...],
+    guidance: tuple[GuidanceSnapshot, ...],
+) -> tuple[bytes, bytes]:
+    """Erzeuge identische Downloads je Sitzungsstand nur einmal pro Rerun-Serie."""
+    return (
+        create_excel_export(
+            workspace,
+            selected_period_keys=selected,
+            expectations=expectations,
+            guidance=guidance,
+        ),
+        create_financial_history_csv(workspace, selected_period_keys=selected),
+    )
 
 
 def _safe_filename(company_name: str) -> str:
@@ -26,10 +47,10 @@ def render_export_section(
 ) -> None:
     """Biete Excel und CSV an, ohne Dateien dauerhaft lokal abzulegen."""
     st.subheader("Export")
-    scope = st.radio(
+    scope = st.segmented_control(
         "Perioden für den Export",
         ("Alle verfügbaren Perioden", "Aktuell ausgewählte Trendperioden"),
-        horizontal=True,
+        default="Alle verfügbaren Perioden",
         key="history_export_scope",
     )
     available = {str(key): key for key in workspace.period_keys}
@@ -50,14 +71,11 @@ def render_export_section(
         + ". Fehlende Werte und offene Konflikte bleiben leer."
     )
     try:
-        xlsx = create_excel_export(
+        xlsx, csv_data = _create_export_payloads(
             workspace,
-            selected_period_keys=selected,
-            expectations=tuple(st.session_state.get("expectation_snapshots", ())),
-            guidance=tuple(st.session_state.get("guidance_snapshots", ())),
-        )
-        csv_data = create_financial_history_csv(
-            workspace, selected_period_keys=selected,
+            selected,
+            tuple(st.session_state.get("expectation_snapshots", ())),
+            tuple(st.session_state.get("guidance_snapshots", ())),
         )
     except ExportValidationError as error:
         st.error(f"Export konnte nicht erstellt werden: {error}")

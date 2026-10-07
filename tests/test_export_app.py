@@ -44,7 +44,7 @@ def test_history_export_buttons_and_existing_analysis_render_together() -> None:
 
 def test_export_can_follow_selected_trend_periods() -> None:
     app = _export_app()
-    app.radio(key="history_export_scope").set_value("Aktuell ausgewählte Trendperioden").run()
+    app.get_by_key("history_export_scope").set_value("Aktuell ausgewählte Trendperioden").run()
     assert any(
         "Exportierte Perioden: FY2024 / FY2025" in item.value
         for item in app.caption
