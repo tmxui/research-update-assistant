@@ -9,6 +9,7 @@ from .analysis_selection import (
     default_comparison_keys, period_key,
 )
 from .calculations import calculate_period_metrics
+from .export_ui import render_export_section
 from .history import FinancialHistory
 from .history_workspace import HistoryWorkspace, infer_reported_precision
 from .input_parsing import SCALE_OPTIONS
@@ -297,6 +298,10 @@ def render_history_section(
     result = _render_selection(history)
     if result is not None:
         render_result(result)
+    render_export_section(
+        workspace,
+        trend_period_tokens=tuple(st.session_state.get("history_trend_periods", ())),
+    )
     # Vollständige Tabellen und die Historienverwaltung bleiben erreichbar,
     # stehen aber nicht vor dem kompakten Ergebnis-Update.
     with st.expander("Historientabelle – alle verfügbaren Perioden"):

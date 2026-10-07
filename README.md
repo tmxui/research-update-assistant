@@ -11,11 +11,12 @@ Banken und Versicherungen sind in Version 1 ausgeschlossen.
 
 ## Entwicklungsstand
 
-**Phase 8B – Guidance Tracker:** Manuell erfasste Unternehmens-Guidance bleibt
-als chronologische Folge eigenständiger Snapshots erhalten. Das Results Update
-zeigt Actual vs Guidance und mathematisch eindeutige Änderungen gegenüber dem
-vorherigen Guidance-Stand. Expectations bleiben davon strikt getrennt und
-können gleichzeitig angezeigt werden. Eine zusätzliche Ansicht fasst
+**Phase 9 – Excel/CSV Export & Model Handoff:** Bestätigte und ausdrücklich
+aufgelöste Finanzdaten können direkt aus der Historie als modellfreundliches
+XLSX oder als Long-Format-CSV heruntergeladen werden. Das Workbook trennt
+Financials, berechnete KPIs, Expectations, Guidance und Sources. Offene
+Konflikte bleiben leer und sämtliche alternativen Observations bleiben im
+Sources-Sheet nachvollziehbar. Eine zusätzliche Ansicht fasst
 bestätigte Resultate, Veränderungen, Research-Prüfpunkte, Trends und Quellen
 für das ausdrücklich gewählte Vergleichspaar zusammen. Mehrere Reports eines
 Unternehmens können in einer lokalen Historie zusammengeführt werden. Alle
@@ -29,8 +30,8 @@ zwei oder drei Perioden und zeigt eine chronologische Finanzübersicht sowie
 aufeinanderfolgende Periodenvergleiche. Eine unabhängige Regel-Engine erzeugt
 transparente Research-Prüfpunkte aus den bestehenden Phase-1-Berechnungen.
 Fünf Kennzahlenkarten und Plotly-Diagramme machen die vorhandenen Daten sichtbar.
-OCR, externe LLM/API-Extraktion, externe Consensus-Anbieter, Excel-Export
-und Machine Learning sind noch nicht implementiert.
+OCR, externe LLM/API-Extraktion, externe Consensus-Anbieter und Machine
+Learning sind noch nicht implementiert.
 
 ## Installation und Start (macOS / VS-Code-Terminal)
 
@@ -55,7 +56,7 @@ python -m streamlit run app.py
 
 Öffne `http://localhost:8501` im Browser, falls sich kein Fenster automatisch
 öffnet. Du solltest den Projekttitel, die deutsche Beschreibung und den
-Phase-8B-Hinweis sowie die Tabs PDF-gestützte Analyse, Manuelle Eingabe,
+Phase-9-Hinweis sowie die Tabs PDF-gestützte Analyse, Manuelle Eingabe,
 Finanzhistorie, Erwartungen und Guidance sehen. Beende den Server im Terminal mit `Ctrl+C`.
 Mit `deactivate` verlässt du anschliessend die virtuelle Umgebung.
 
@@ -77,10 +78,33 @@ git status
 Die Tests prüfen synthetische PDFs, Seitenherkunft, Roh-Tabellen, Textsuche und
 PDF-Fehler sowie Diagrammdaten und Kennzahlenkarten, die Research-Regeln und YAML-Validierung, den Formularablauf, Schweizer Zahlenformate, den App-Start,
 die Formeln, fehlende Werte, Einheiten, Halbjahres-Leverage und die Historie
-mit mehreren Quellen.
+mit mehreren Quellen sowie XLSX-/CSV-Exporte, leere Konfliktzellen und echte
+numerische Excel-Werte.
 Git und der GitHub-Remote sind eingerichtet. Phase 6 wurde nach dem lokalen
 Multi-Report-Test mit den konsolidierten Geberit-Abschlüssen 2025 und 2024
 fachlich freigegeben.
+
+## Excel/CSV Export in Phase 9
+
+Der Bereich **Export** in der Finanzhistorie verwendet entweder alle
+verfügbaren Perioden oder die aktuell gewählten Trendperioden. Beide Downloads
+entstehen vollständig im Arbeitsspeicher; die App schreibt keine dauerhaften
+Exportdateien in den Projektordner.
+
+Das Workbook enthält **Overview**, **Financials**, **Calculated KPIs**,
+**Expectations**, **Guidance** und **Sources**. Financials und KPIs sind als
+Kennzahl-mal-Periode-Matrizen aufgebaut. Beträge und Ratios bleiben numerische
+Excel-Zellen, fehlende Werte bleiben leer und Prozentwerte erhalten ein
+Excel-Prozentformat. Reported und calculated Kennzahlen stehen in getrennten
+Zeilen. Die Python-Finance-Engine liefert alle berechneten Werte; das Workbook
+enthält keine neu implementierten Finanzformeln.
+
+Ein ungeklärter Quellenkonflikt erzeugt keinen aktiven Exportwert. Die
+betroffene Financials-Zelle bleibt leer, Overview nennt den Konflikt und
+Sources enthält sämtliche bestätigten alternativen Observations mit Dokument,
+PDF-Seite, Reported Label, Extraktionsmethode und Status. Das CSV verwendet ein
+einfaches Long-Format mit Unternehmen, Periode, Kennzahl, Wert, Einheit und
+aktiver Quellenherkunft.
 
 ## Guidance Tracker in Phase 8B
 
@@ -596,6 +620,8 @@ Alle Geldbeträge sind CHF Millionen. Nur die Terminalausgabe wird formatiert.
 - `src/research_update_assistant/guidance.py`: Validierung, Guidance-Historienvergleich und Actual-vs-Guidance-Logik.
 - `src/research_update_assistant/guidance_ui.py`: Kompakte manuelle Erfassung und Auswahl von Guidance-Snapshots.
 - `src/research_update_assistant/guidance_results_ui.py`: Getrennter Guidance-Block im Ergebnis-Update.
+- `src/research_update_assistant/exports.py`: Testbare In-Memory-Erzeugung von XLSX und Long-Format-CSV.
+- `src/research_update_assistant/export_ui.py`: Periodenauswahl und Streamlit-Downloadbuttons für den Export.
 - `src/research_update_assistant/history_ui.py`: Lokaler Historienbereich, Konfliktprüfung und Periodenauswahl.
 - `src/research_update_assistant/source_ui.py`: Gemeinsame Anzeige der Provenance und Analystenkorrekturen.
 - `src/research_update_assistant/ui.py`: Manuelles Formular, Analyst-Dashboard und Ergebnistabellen, ohne Finanzformeln.

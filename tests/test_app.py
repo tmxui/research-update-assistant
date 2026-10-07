@@ -54,7 +54,7 @@ def test_app_starts_with_german_content() -> None:
     assert app.title[0].value == "Research Update Assistant"
     assert app.markdown[0].value == "Strukturierte Auswertung von Unternehmensresultaten"
     assert app.info[0].value == (
-        "Aktueller Entwicklungsstand: Phase 8B – Guidance Tracker"
+        "Aktueller Entwicklungsstand: Phase 9 – Excel/CSV Export & Model Handoff"
     )
     assert [item.value for item in app.subheader] == [
         "1. Unternehmensdaten", "2. Finanzperioden erfassen", "3. Daten prüfen",

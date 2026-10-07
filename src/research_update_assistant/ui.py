@@ -568,7 +568,7 @@ def render_home_page() -> None:
         st.session_state.setdefault(key, value)
     st.title("Research Update Assistant")
     st.markdown("Strukturierte Auswertung von Unternehmensresultaten")
-    st.info("Aktueller Entwicklungsstand: Phase 8B – Guidance Tracker")
+    st.info("Aktueller Entwicklungsstand: Phase 9 – Excel/CSV Export & Model Handoff")
     st.caption("Wähle einen Eingabeweg. PDF-Prüfung und manuelle Eingabe sind Alternativen und benötigen keine doppelte Erfassung.")
     pdf_tab, manual_tab, history_tab, expectations_tab, guidance_tab = st.tabs(
         [
