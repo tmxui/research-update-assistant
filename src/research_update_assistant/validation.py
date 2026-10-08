@@ -12,6 +12,7 @@ from math import isfinite
 from typing import Literal
 
 from .candidate_models import BBox, FinancialMetricCandidate, PeriodValueCandidate
+from .calculations import calculate_gross_debt
 from .history import FinancialHistory
 from .input_parsing import CURRENCIES, SCALE_OPTIONS, NumberParsingError, parse_optional_number
 from .models import FinancialPeriod, SourceMetadata
@@ -20,7 +21,8 @@ from .models import FinancialPeriod, SourceMetadata
 SUPPORTED_METRICS = (
     "revenue", "ebitda", "adjusted_ebitda", "ebit", "adjusted_ebit", "net_income",
     "basic_eps", "diluted_eps", "operating_cash_flow", "capex",
-    "reported_free_cash_flow", "cash", "gross_debt", "reported_net_debt",
+    "reported_free_cash_flow", "cash", "current_financial_debt",
+    "noncurrent_financial_debt", "gross_debt", "reported_net_debt",
     "inventory", "receivables", "payables", "total_assets", "equity",
 )
 EPS_METRICS = ("basic_eps", "diluted_eps")
@@ -238,6 +240,53 @@ def confirm_manual_metric(
     )
 
 
+def derive_gross_debt_observations(
+    observations: Sequence[ConfirmedMetricObservation],
+) -> tuple[ConfirmedMetricObservation, ...]:
+    """Leite Bruttoschulden nur aus zwei kompatiblen, bestätigten Komponenten ab.
+
+    Die beiden ursprünglichen Observations bleiben vollständig erhalten. Die
+    zusätzliche Observation ist ausdrücklich als ``derived`` gekennzeichnet und
+    behauptet keine eigene PDF-Seite oder Originalbezeichnung. Ein direkt
+    bestätigter gross_debt-Wert hat Vorrang.
+    """
+    if any(not isinstance(item, ConfirmedMetricObservation) for item in observations):
+        raise TypeError("Unbestätigte Kandidaten dürfen nicht als Finanzdaten übernommen werden.")
+    result = list(observations)
+    labels = tuple(dict.fromkeys(item.period_label for item in observations))
+    for label in labels:
+        period_items = tuple(item for item in observations if item.period_label == label)
+        if any(item.canonical_metric == "gross_debt" for item in period_items):
+            continue
+        current = tuple(
+            item for item in period_items if item.canonical_metric == "current_financial_debt"
+        )
+        noncurrent = tuple(
+            item for item in period_items if item.canonical_metric == "noncurrent_financial_debt"
+        )
+        if len(current) != 1 or len(noncurrent) != 1:
+            continue
+        short_term, long_term = current[0], noncurrent[0]
+        if (short_term.currency, short_term.scale) != (long_term.currency, long_term.scale):
+            continue
+        derived_value = calculate_gross_debt(
+            short_term.confirmed_value, long_term.confirmed_value,
+        )
+        result.append(ConfirmedMetricObservation(
+            canonical_metric="gross_debt",
+            period_label=label,
+            confirmed_value=derived_value,
+            currency=short_term.currency,
+            scale=short_term.scale,
+            status="confirmed",
+            source_snippet=(
+                "Abgeleitet aus kurzfristigen und langfristigen Finanzverbindlichkeiten."
+            ),
+            extraction_method="derived",
+        ))
+    return tuple(result)
+
+
 def create_confirmed_history(
     company_name: str,
     currency: str,
@@ -265,8 +314,11 @@ def create_confirmed_history(
         raise CandidateValidationError("Die bestätigten Perioden müssen unterschiedliche Stichtage besitzen.")
     if len({period.period_months for period in periods}) != 1:
         raise CandidateValidationError("Jahres- und Halbjahresperioden dürfen nicht direkt verglichen werden.")
+    if any(not isinstance(item, ConfirmedMetricObservation) for item in observations):
+        raise TypeError("Unbestätigte Kandidaten dürfen nicht als Finanzdaten übernommen werden.")
     values: dict[str, dict[str, float]] = {label: {} for label in labels}
-    for observation in observations:
+    enriched_observations = derive_gross_debt_observations(observations)
+    for observation in enriched_observations:
         if not isinstance(observation, ConfirmedMetricObservation):
             raise TypeError("Unbestätigte Kandidaten dürfen nicht als Finanzdaten übernommen werden.")
         if observation.period_label not in values:

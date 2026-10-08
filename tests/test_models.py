@@ -15,8 +15,10 @@ def test_optional_values_default_to_none() -> None:
     )
     for name in (
         "revenue", "ebitda", "adjusted_ebitda", "ebit", "adjusted_ebit", "net_income",
-        "operating_cash_flow", "capex", "reported_free_cash_flow", "cash", "gross_debt",
+        "operating_cash_flow", "capex", "reported_free_cash_flow", "cash",
+        "current_financial_debt", "noncurrent_financial_debt", "gross_debt",
         "reported_net_debt", "inventory", "receivables", "payables", "total_assets", "equity",
+        "basic_eps", "diluted_eps",
         "source",
     ):
         assert getattr(period, name) is None

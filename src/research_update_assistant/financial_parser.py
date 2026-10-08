@@ -272,13 +272,37 @@ def _nearby_unit(rows: tuple[LayoutRow, ...], index: int, fallback: tuple[str | 
     return fallback
 
 
-def _debt_component_heading(text: str) -> bool:
-    """Kurz-/langfristige Schulden sind Bestandteile, keine Gesamtverschuldung."""
-    return re.fullmatch(
-        r"(?:kurzfristig\w*|langfristig\w*|current|non[ -]?current)\s+"
+def _debt_component_metric(text: str) -> str | None:
+    """Erkenne die Richtung einer Kurz-/Langfrist-Überschrift eindeutig."""
+    match = re.fullmatch(
+        r"(kurzfristig\w*|langfristig\w*|current|non[ -]?current)\s+"
         r"(?:finanz)?(?:verbindlichkeiten|schulden|liabilities|debt|borrowings)",
         text.strip(), re.IGNORECASE,
-    ) is not None
+    )
+    if match is None:
+        return None
+    qualifier = match.group(1).casefold().replace("-", "").replace(" ", "")
+    return (
+        "noncurrent_financial_debt"
+        if qualifier.startswith("langfrist") or qualifier.startswith("noncurrent")
+        else "current_financial_debt"
+    )
+
+
+def _apply_debt_component_context(
+    match: MetricMatch | None,
+    component_metric: str | None,
+    config: MetricConfig,
+) -> MetricMatch | None:
+    """Ordne generische Finanzschulden unter eindeutiger Überschrift der Komponente zu."""
+    if match is None or match.canonical_metric != "gross_debt" or component_metric is None:
+        return match
+    label = (
+        "Kurzfristige Finanzverbindlichkeiten"
+        if component_metric == "current_financial_debt"
+        else "Langfristige Finanzverbindlichkeiten"
+    )
+    return map_metric_label(label, config)
 
 
 def _closes_debt_component_section(text: str) -> bool:
@@ -299,7 +323,7 @@ def _layout_candidates(
     candidates: list[FinancialMetricCandidate] = []
     half_year = _has_half_year_context(document, page)
     unsupported = _unsupported_period_context(document, page)
-    debt_component = False
+    debt_component: str | None = None
     index = 0
     while index < len(rows):
         row = rows[index]
@@ -309,7 +333,7 @@ def _layout_candidates(
             columns = ()
             note_positions = ()
             fallback_unit = detect_currency_scale(row.text)
-            debt_component = False
+            debt_component = None
             index += 1
             continue
         if header := period_columns_in_row(row):
@@ -327,11 +351,12 @@ def _layout_candidates(
             continue
         cells = extract_numeric_cells(row)
         label, mapping_label = _layout_labels(row, cells, columns, note_positions)
-        if _debt_component_heading(label):
-            debt_component = True
+        if component := _debt_component_metric(label):
+            debt_component = component
         elif _closes_debt_component_section(label):
-            debt_component = False
+            debt_component = None
         match = map_metric_label(mapping_label, config) if mapping_label else None
+        match = _apply_debt_component_context(match, debt_component, config)
         consumed = 1
         snippet = row.text
         bbox = row.bbox
@@ -367,7 +392,7 @@ def _layout_candidates(
                     break
                 if next_cells:
                     break  # Zahlen einer unbekannten Zeile nicht mit der nächsten Kennzahl verbinden.
-        if match and cells and not (match.canonical_metric == "gross_debt" and debt_component):
+        if match and cells:
             values, uncertain = _layout_values(cells, columns)
             if values:
                 currency, scale = _nearby_unit(rows, index, fallback_unit)
@@ -395,7 +420,7 @@ def _table_candidates(
     note_columns: set[int] = set()
     half_year = _has_half_year_context(document, page)
     unsupported = _unsupported_period_context(document, page)
-    debt_component = False
+    debt_component: str | None = None
     for row in table.rows:
         header = {
             index: (text or "", _period_with_context(text, period, half_year, unsupported=unsupported))
@@ -415,15 +440,14 @@ def _table_candidates(
                 continue
             label = re.sub(r"\s+", " ", label_cell).strip()
             mapping_label = _table_mapping_label(label, columns)
-            if _debt_component_heading(label):
-                debt_component = True
+            if component := _debt_component_metric(label):
+                debt_component = component
             elif _closes_debt_component_section(label):
-                debt_component = False
+                debt_component = None
             match = map_metric_label(mapping_label, config)
+            match = _apply_debt_component_context(match, debt_component, config)
             if match is None:
                 continue
-            if match.canonical_metric == "gross_debt" and debt_component:
-                break
             values: list[PeriodValueCandidate] = []
             value_columns = sorted(columns) if columns else range(label_index + 1, len(row))
             for column_index in value_columns:

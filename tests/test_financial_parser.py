@@ -95,6 +95,32 @@ def test_missing_capex_does_not_invent_candidate():
     assert "capex" not in [item.canonical_metric for item in candidates]
 
 
+def test_generic_and_diluted_eps_in_same_table_stay_separate_with_original_labels():
+    text = (
+        "Konzernerfolgsrechnung\nCHF Mio\n2025 2024\n"
+        "Nettoumsatz 1100 1000\nEBIT 143 150\nNettoergebnis 92 100\n"
+        "Ergebnis je Aktie 4.10 4.25\nVerwässertes Ergebnis je Aktie 4.05 4.20"
+    )
+    table = ExtractedTable(1, 1, (
+        ("Bezeichnung", "2025", "2024"),
+        ("Nettoumsatz", "1100", "1000"),
+        ("EBIT", "143", "150"),
+        ("Nettoergebnis", "92", "100"),
+        ("Ergebnis je Aktie", "4.10", "4.25"),
+        ("Verwässertes Ergebnis je Aktie", "4.05", "4.20"),
+    ))
+    candidates = extract_financial_metric_candidates(
+        page_document(ExtractedPage(1, text, tables=(table,))), load_metric_config(),
+    )
+    basic = next(item for item in candidates if item.canonical_metric == "basic_eps")
+    diluted = next(item for item in candidates if item.canonical_metric == "diluted_eps")
+    assert basic.reported_label == "Ergebnis je Aktie"
+    assert diluted.reported_label == "Verwässertes Ergebnis je Aktie"
+    assert values(basic) == {"FY2025": 4.10, "FY2024": 4.25}
+    assert values(diluted) == {"FY2025": 4.05, "FY2024": 4.20}
+    assert basic.scale == diluted.scale == "unit"
+
+
 @pytest.mark.parametrize("text,currency,scale", [
     ("CHF Mio.", "CHF", "million"), ("in Mio. CHF", "CHF", "million"),
     ("MCHF", "CHF", "million"), ("CHF Millionen", "CHF", "million"),
@@ -352,7 +378,7 @@ def test_unit_header_remains_active_after_more_than_twelve_rows():
 
 
 @pytest.mark.parametrize("table_channel", [False, True])
-def test_current_and_noncurrent_debt_components_are_not_total_gross_debt(table_channel):
+def test_sectioned_current_and_noncurrent_debt_are_components_not_total_gross_debt(table_channel):
     text = "Konzernbilanz\nCHF Mio\n2025 2024\nKurzfristige Verbindlichkeiten\nFinanzverbindlichkeiten 40 30\nLangfristige Verbindlichkeiten\nFinanzverbindlichkeiten 320 270\nVorräte 190 150\nEigenkapital 550 500"
     words = (
         word("Konzernbilanz", 30, 10, 130), word("CHF", 30, 35), word("Mio", 70, 35),
@@ -372,8 +398,48 @@ def test_current_and_noncurrent_debt_components_are_not_total_gross_debt(table_c
                                  ("Vorräte", "190", "150"), ("Eigenkapital", "550", "500")))
     page = ExtractedPage(1, text, tables=(table,) if table_channel else (), words=() if table_channel else words)
     candidates = extract_financial_metric_candidates(page_document(page), load_metric_config())
-    assert "gross_debt" not in [item.canonical_metric for item in candidates]
-    assert {item.canonical_metric for item in candidates} == {"inventory", "equity"}
+    by_metric = {item.canonical_metric: item for item in candidates}
+    assert "gross_debt" not in by_metric
+    assert set(by_metric) == {
+        "current_financial_debt", "noncurrent_financial_debt", "inventory", "equity",
+    }
+    assert values(by_metric["current_financial_debt"]) == {"FY2025": 40, "FY2024": 30}
+    assert values(by_metric["noncurrent_financial_debt"]) == {"FY2025": 320, "FY2024": 270}
+
+
+@pytest.mark.parametrize("table_channel", [False, True])
+def test_explicit_current_and_noncurrent_financial_debt_are_separate_candidates(table_channel):
+    text = (
+        "Konzernbilanz\nCHF Mio\n2025 2024\n"
+        "Kurzfristige Finanzverbindlichkeiten 40 30\n"
+        "Langfristige Finanzverbindlichkeiten 320 270\n"
+        "Vorräte 190 150\nEigenkapital 550 500"
+    )
+    words = (
+        word("Konzernbilanz", 30, 10, 130), word("CHF", 30, 35), word("Mio", 70, 35),
+        word("2025", 400, 60), word("2024", 520, 60),
+        word("Kurzfristige", 30, 85, 75), word("Finanzverbindlichkeiten", 110, 85, 150),
+        word("40", 400, 85), word("30", 520, 85),
+        word("Langfristige", 30, 110, 75), word("Finanzverbindlichkeiten", 110, 110, 150),
+        word("320", 400, 110), word("270", 520, 110),
+        word("Vorräte", 30, 135, 50), word("190", 400, 135), word("150", 520, 135),
+        word("Eigenkapital", 30, 160, 80), word("550", 400, 160), word("500", 520, 160),
+    )
+    table = ExtractedTable(1, 1, (
+        ("Bezeichnung", "2025", "2024"),
+        ("Kurzfristige Finanzverbindlichkeiten", "40", "30"),
+        ("Langfristige Finanzverbindlichkeiten", "320", "270"),
+        ("Vorräte", "190", "150"), ("Eigenkapital", "550", "500"),
+    ))
+    page = ExtractedPage(
+        1, text, tables=(table,) if table_channel else (),
+        words=() if table_channel else words,
+    )
+    candidates = extract_financial_metric_candidates(page_document(page), load_metric_config())
+    by_metric = {item.canonical_metric: item for item in candidates}
+    assert values(by_metric["current_financial_debt"]) == {"FY2025": 40, "FY2024": 30}
+    assert values(by_metric["noncurrent_financial_debt"]) == {"FY2025": 320, "FY2024": 270}
+    assert "gross_debt" not in by_metric
 
 
 @pytest.mark.parametrize("ruled", [False, True])

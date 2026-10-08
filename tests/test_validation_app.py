@@ -1,6 +1,7 @@
 """PDF-Prüfung bis zum bestehenden Dashboard mit echten synthetischen Uploads."""
 
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -49,6 +50,9 @@ def test_candidates_are_visible_but_never_create_financial_periods(monkeypatch):
     assert "Extrahierte Finanzdaten prüfen" in [item.value for item in app.header]
     assert any("Originalbezeichnung: Nettoumsatz" in item.value for item in app.text)
     assert any("PDF-Seite 1" in item.value for item in app.text)
+    source_details = {item.label: item for item in app.expander}
+    assert not source_details["Warum diese Quelle?"].proto.expanded
+    assert not source_details["Extraktionsdetails"].proto.expanded
     assert [item.value for item in _values(app, "revenue")] == ["1000.0", "1100.0"]
     assert app.session_state["analysis_result"] is None
     assert calculator.call_count == 0
@@ -93,7 +97,7 @@ def test_correction_audit_and_existing_dashboard_then_manual_regression():
     assert app.session_state["analysis_result"].observations == ()
 
 
-def test_confirmation_is_invalidated_by_value_or_metadata_changes():
+def test_confirmation_is_invalidated_by_value_change():
     app = _app()
     _company(app)
     _confirm(app, "revenue")
@@ -102,10 +106,48 @@ def test_confirmation_is_invalidated_by_value_or_metadata_changes():
     _accept(app)
     assert app.session_state["analysis_result"] is None
     assert any("mindestens eine Kennzahl" in item.value for item in app.error)
+
+
+def test_confirmations_survive_currency_scale_company_and_period_metadata_reruns():
+    app = _app()
+    _company(app)
     _confirm(app, "revenue")
+    app.selectbox(key="review_metric").select("ebit").run()
+    _values(app, "ebit")[1].set_value("145").run()
+    app.button(key="review_confirm_metric").click().run()
+    assert app.session_state["review_records"]["ebit"][0] == "Geändert"
+    app.selectbox(key="review_metric").select("inventory").run()
+    app.button(key="review_reject_metric").click().run()
+    assert app.session_state["review_records"]["inventory"] == ("Abgelehnt", ())
+    app.checkbox(key="review_metadata_confirmed").check().run()
+    records = dict(app.session_state["review_records"])
+
     app.text_input(key="review_company").set_value("New company AG").run()
-    assert not app.session_state["review_records"]
+    assert dict(app.session_state["review_records"]) == records
     assert not app.checkbox(key="review_metadata_confirmed").value
+    app.selectbox(key="review_currency").select("EUR").run()
+    assert dict(app.session_state["review_records"]) == records
+    app.selectbox(key="review_scale").select("thousand").run()
+    assert dict(app.session_state["review_records"]) == records
+    app.text_input(key="review_period_0_label").set_value("FY2024 restated").run()
+    assert dict(app.session_state["review_records"]) == records
+    app.date_input(key="review_period_0_end").set_value(date(2024, 11, 30)).run()
+    assert dict(app.session_state["review_records"]) == records
+    app.number_input(key="review_period_0_months").set_value(6).run()
+    assert dict(app.session_state["review_records"]) == records
+    assert app.session_state["pdf_ready_history"] is None
+
+
+def test_metadata_mismatch_warns_without_deleting_confirmations():
+    app = _app()
+    _company(app)
+    _confirm(app, "revenue")
+    records = dict(app.session_state["review_records"])
+    app.selectbox(key="review_currency").select("EUR").run()
+    _accept(app)
+    assert dict(app.session_state["review_records"]) == records
+    assert app.session_state["analysis_result"] is None
+    assert any("Währung oder Skalierung" in item.value for item in app.error)
 
 
 def test_rejected_candidate_is_not_taken_and_metadata_requires_confirmation():
@@ -307,15 +349,65 @@ def test_document_replacement_clears_all_review_decisions():
     assert app.session_state["analysis_result"] is None
 
 
-def test_unit_mismatch_is_blocked_without_silent_conversion():
+def test_matching_candidate_inherits_global_units_without_duplicate_inputs():
     app = _app()
     _company(app)
-    unit = next(item for item in app.selectbox if item.key.startswith("review_unit_currency_revenue_"))
-    unit.select("EUR").run()
+    _confirm(app, "revenue")
+    assert not any(item.key.startswith("review_unit_currency_revenue_") for item in app.selectbox)
+    assert not any(item.key.startswith("review_unit_scale_revenue_") for item in app.selectbox)
+    observations = app.session_state["review_records"]["revenue"][1]
+    assert all((item.currency, item.scale) == ("CHF", "million") for item in observations)
+
+
+def test_candidate_unit_mismatch_requires_visible_override_and_blocks_silent_conversion(monkeypatch):
+    original = pdf_ui.extract_financial_metric_candidates
+
+    def with_mismatched_revenue(document, config):
+        return tuple(
+            replace(candidate, currency="EUR", scale="thousand")
+            if candidate.canonical_metric == "revenue" else candidate
+            for candidate in original(document, config)
+        )
+
+    monkeypatch.setattr(pdf_ui, "extract_financial_metric_candidates", with_mismatched_revenue)
+    app = _app()
+    _company(app)
+    assert any(item.label == "Erweiterte Einheitseinstellungen" for item in app.expander)
+    assert next(item for item in app.selectbox if item.key.startswith("review_unit_currency_revenue_")).value == "EUR"
+    assert next(item for item in app.selectbox if item.key.startswith("review_unit_scale_revenue_")).value == "thousand"
     _confirm(app, "revenue")
     _accept(app)
     assert app.session_state["analysis_result"] is None
     assert any("Währung oder Skalierung" in item.value for item in app.error)
+
+
+def test_missing_global_units_are_reported_before_metric_confirmation(monkeypatch):
+    original = pdf_ui.extract_financial_metric_candidates
+
+    def without_units(document, config):
+        return tuple(
+            replace(candidate, currency=None, scale=None)
+            for candidate in original(document, config)
+        )
+
+    monkeypatch.setattr(pdf_ui, "extract_financial_metric_candidates", without_units)
+    app = _app()
+    assert app.selectbox(key="review_currency").value is None
+    assert app.selectbox(key="review_scale").value is None
+    assert any(
+        "Für die Analyse noch erforderlich:" in item.value
+        and "Währung" in item.value and "Einheit" in item.value
+        for item in app.warning
+    )
+
+
+def test_debt_components_are_separate_validation_choices():
+    app = _app()
+    selector = app.selectbox(key="review_metric")
+    selector.select("current_financial_debt").run()
+    assert app.selectbox(key="review_source_current_financial_debt").value == "manual"
+    app.selectbox(key="review_metric").select("noncurrent_financial_debt").run()
+    assert app.selectbox(key="review_source_noncurrent_financial_debt").value == "manual"
 
 
 def test_segment_candidate_cannot_be_confirmed(monkeypatch):

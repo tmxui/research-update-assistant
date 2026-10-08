@@ -281,8 +281,8 @@ def test_manual_additions_within_pdf_review_stay_in_pdf_workflow(monkeypatch):
         app.date_input(key=f"review_period_{index}_end").set_value(date(year, 12, 31)).run()
         app.number_input(key=f"review_period_{index}_months").set_value(12).run()
     assert app.selectbox(key="review_source_revenue").value == "manual"
-    app.selectbox(key="review_unit_currency_revenue_manual").select("CHF").run()
-    app.selectbox(key="review_unit_scale_revenue_manual").select("million").run()
+    assert not any(item.key == "review_unit_currency_revenue_manual" for item in app.selectbox)
+    assert not any(item.key == "review_unit_scale_revenue_manual" for item in app.selectbox)
     _values(app, "revenue")[0].set_value("1000")
     _values(app, "revenue")[1].set_value("1100").run()
     app.button(key="review_confirm_metric").click().run()

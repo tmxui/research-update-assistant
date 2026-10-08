@@ -16,6 +16,7 @@ from research_update_assistant.validation import (
     confirm_candidate,
     confirm_manual_metric,
     create_confirmed_history,
+    derive_gross_debt_observations,
 )
 
 
@@ -297,6 +298,60 @@ def test_eps_is_per_share_and_never_rescaled(annual_periods):
     period = create_confirmed_history("Synthetic", "CHF", "million", annual_periods, observations).get_period("FY2025")
     assert period.basic_eps == 1.25
     assert period.scale == "million"
+
+
+def test_two_compatible_debt_components_derive_gross_debt_and_remain_preserved(annual_periods):
+    current = confirm_manual_metric(
+        "current_financial_debt", values={"FY2025": "40", "FY2024": "30"},
+        currency="CHF", scale="million",
+    )
+    noncurrent = confirm_manual_metric(
+        "noncurrent_financial_debt", values={"FY2025": "320", "FY2024": "270"},
+        currency="CHF", scale="million",
+    )
+    source_observations = (*current, *noncurrent)
+    enriched = derive_gross_debt_observations(source_observations)
+    assert enriched[:4] == source_observations
+    derived = tuple(item for item in enriched if item.canonical_metric == "gross_debt")
+    assert [(item.period_label, item.value) for item in derived] == [
+        ("FY2025", 360), ("FY2024", 300),
+    ]
+    assert all(item.extraction_method == "derived" for item in derived)
+    assert all(item.source_document is None and item.page_number is None for item in derived)
+    history = create_confirmed_history(
+        "Synthetic", "CHF", "million", annual_periods, source_observations,
+    )
+    assert history.get_period("FY2025").current_financial_debt == 40
+    assert history.get_period("FY2025").noncurrent_financial_debt == 320
+    assert history.get_period("FY2025").gross_debt == 360
+
+
+def test_one_debt_component_does_not_invent_gross_debt(annual_periods):
+    observations = confirm_manual_metric(
+        "current_financial_debt", values={"FY2025": "40"},
+        currency="CHF", scale="million",
+    )
+    enriched = derive_gross_debt_observations(observations)
+    assert enriched == observations
+    period = create_confirmed_history(
+        "Synthetic", "CHF", "million", annual_periods, observations,
+    ).get_period("FY2025")
+    assert period.current_financial_debt == 40
+    assert period.noncurrent_financial_debt is None
+    assert period.gross_debt is None
+
+
+def test_incompatible_debt_components_do_not_derive_gross_debt():
+    current = confirm_manual_metric(
+        "current_financial_debt", values={"FY2025": "40"},
+        currency="CHF", scale="million",
+    )
+    noncurrent = confirm_manual_metric(
+        "noncurrent_financial_debt", values={"FY2025": "320000"},
+        currency="CHF", scale="thousand",
+    )
+    enriched = derive_gross_debt_observations((*current, *noncurrent))
+    assert not any(item.canonical_metric == "gross_debt" for item in enriched)
 
 
 def test_h1_history_does_not_annualize_ebitda():

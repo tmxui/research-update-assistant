@@ -6,6 +6,7 @@ import pytest
 
 from research_update_assistant.calculations import (
     PeriodCompatibilityError,
+    calculate_gross_debt,
     calculate_period_metrics,
     compare_periods,
     margin_change,
@@ -52,6 +53,14 @@ def test_missing_margins(current, previous) -> None:
 @pytest.mark.parametrize("raw, expected", [(-80, 80), (80, 80), (0, 0), (None, None)])
 def test_normalize_capex(raw, expected) -> None:
     assert normalize_capex(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "current, noncurrent, expected",
+    [(40, 320, 360), (0, 320, 320), (None, 320, None), (40, None, None), (None, None, None)],
+)
+def test_gross_debt_requires_both_components(current, noncurrent, expected) -> None:
+    assert calculate_gross_debt(current, noncurrent) == expected
 
 
 @pytest.mark.parametrize(

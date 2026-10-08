@@ -47,9 +47,18 @@ def test_all_configured_synonyms_map_to_their_own_metric(metric_config):
     ("Nettomittelfluss aus/für (-) Geschäftstätigkeit", "operating_cash_flow"),
     ("Bereinigtes EBIT", "adjusted_ebit"), ("EBIT bereinigt", "adjusted_ebit"),
     ("Adjusted EBITDA", "adjusted_ebitda"), ("EBITDA vor Einmaleffekten", "adjusted_ebitda"),
-    ("Shareholders’ Equity", "equity"), ("Basic EPS", "basic_eps"),
-    ("Diluted EPS", "diluted_eps"), ("Unverwässertes Ergebnis je Aktie", "basic_eps"),
+    ("Shareholders’ Equity", "equity"), ("Ergebnis je Aktie", "basic_eps"),
+    ("Gewinn je Aktie", "basic_eps"), ("EPS", "basic_eps"),
+    ("Earnings per Share", "basic_eps"), ("Basic EPS", "basic_eps"),
+    ("Basic Earnings per Share", "basic_eps"),
+    ("Diluted EPS", "diluted_eps"),
+    ("Diluted Earnings per Share", "diluted_eps"),
+    ("Unverwässertes Ergebnis je Aktie", "basic_eps"),
     ("Verwässertes Ergebnis je Aktie", "diluted_eps"),
+    ("Kurzfristige Finanzverbindlichkeiten", "current_financial_debt"),
+    ("Current Borrowings", "current_financial_debt"),
+    ("Langfristige Finanzverbindlichkeiten", "noncurrent_financial_debt"),
+    ("Non-current Borrowings", "noncurrent_financial_debt"),
 ])
 def test_priority_and_normalization_rules(metric_config, label, expected):
     match = map_metric_label(label, metric_config)
@@ -92,7 +101,7 @@ def test_explicit_unit_suffix_does_not_become_segment(metric_config, label, expe
     assert not match.is_segment
 
 
-@pytest.mark.parametrize("label", ["", "  ", "EBIT/EBITDA", "EPS", "Ergebnis je Aktie", "Veränderung der Vorräte", "Bereinigter Umsatz", "Revenuefulness", "EBIT-Marge", "Umsatzwachstum", "EBIT %", "EBITDA margin", "Net Debt / EBITDA"])
+@pytest.mark.parametrize("label", ["", "  ", "EBIT/EBITDA", "Veränderung der Vorräte", "Bereinigter Umsatz", "Revenuefulness", "EBIT-Marge", "Umsatzwachstum", "EBIT %", "EBITDA margin", "Net Debt / EBITDA", "Leasingverbindlichkeiten"])
 def test_ambiguous_or_unknown_label_does_not_get_safe_mapping(metric_config, label):
     assert map_metric_label(label, metric_config) is None
 
@@ -147,8 +156,11 @@ def test_narrative_labels_do_not_become_exact_or_fake_segment_matches(metric_con
 def test_default_config_does_not_depend_on_current_directory(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     config = load_metric_config()
-    assert len(config.metrics) == 19
-    assert {item.canonical_metric for item in config.metrics} >= {"basic_eps", "diluted_eps", "reported_free_cash_flow"}
+    assert len(config.metrics) == 21
+    assert {item.canonical_metric for item in config.metrics} >= {
+        "basic_eps", "diluted_eps", "reported_free_cash_flow",
+        "current_financial_debt", "noncurrent_financial_debt",
+    }
 
 
 def test_custom_synonym_is_used_without_changing_code(config_data, tmp_path):

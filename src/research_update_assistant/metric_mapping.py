@@ -47,7 +47,8 @@ class MetricMatch:
 _EXPECTED_METRICS = (
     "revenue", "ebitda", "adjusted_ebitda", "ebit", "adjusted_ebit",
     "net_income", "basic_eps", "diluted_eps", "operating_cash_flow", "capex",
-    "reported_free_cash_flow", "cash", "gross_debt", "reported_net_debt",
+    "reported_free_cash_flow", "cash", "gross_debt", "current_financial_debt",
+    "noncurrent_financial_debt", "reported_net_debt",
     "inventory", "receivables", "payables", "total_assets", "equity",
 )
 _ADJUSTED = re.compile(r"\b(?:bereinigt\w*|adjusted|vor sondereffekten|vor einmaleffekten)\b")
@@ -175,7 +176,9 @@ def map_metric_label(label: str, config: MetricConfig) -> MetricMatch | None:
 
     Explizites EBIT/EBITDA schlägt alltagssprachliche Bezeichnungen. Adjusted
     wird stets getrennt gehalten. Widersprüchliche Kürzel bleiben ohne Zuordnung.
-    Unspezifisches EPS bleibt offen, da basic und diluted verschiedene Werte sind.
+    Generisches EPS wird als basic_eps behandelt. Explizite verwässerte bzw.
+    diluted Bezeichnungen besitzen eigene, längere Synonyme und gewinnen dadurch
+    vor dem generischen EPS-Mapping.
     """
     normalized = normalize_mapping_label(label)
     if not normalized:

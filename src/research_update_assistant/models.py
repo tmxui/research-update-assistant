@@ -57,6 +57,8 @@ Unveränderliche Datensätze schützen die ausgewiesenen Werte vor Überschreibe
     capex: float | None = None
     reported_free_cash_flow: float | None = None
     cash: float | None = None
+    current_financial_debt: float | None = None
+    noncurrent_financial_debt: float | None = None
     gross_debt: float | None = None
     reported_net_debt: float | None = None
     inventory: float | None = None

@@ -53,6 +53,16 @@ def normalize_capex(capex: float | None) -> float | None:
     return None if capex is None else abs(capex)
 
 
+def calculate_gross_debt(
+    current_financial_debt: float | None,
+    noncurrent_financial_debt: float | None,
+) -> float | None:
+    """Addiere Finanzschulden nur bei zwei vorhandenen Komponenten."""
+    if current_financial_debt is None or noncurrent_financial_debt is None:
+        return None
+    return current_financial_debt + noncurrent_financial_debt
+
+
 def _operating_working_capital(period: FinancialPeriod) -> float | None:
     """Berechne Forderungen + Vorräte - Verbindlichkeiten bei vollständigen Daten."""
     if period.receivables is None or period.inventory is None or period.payables is None:

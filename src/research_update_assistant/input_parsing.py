@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from math import isfinite
 
+from .calculations import calculate_gross_debt
 from .history import FinancialHistory
 from .models import FinancialPeriod
 
@@ -25,6 +26,8 @@ FINANCIAL_INPUT_GROUPS = (
         ("ebit", "EBIT"),
         ("adjusted_ebit", "Bereinigtes EBIT (optional)"),
         ("net_income", "Nettoergebnis"),
+        ("basic_eps", "Ergebnis je Aktie (EPS) (optional)"),
+        ("diluted_eps", "Verwässertes Ergebnis je Aktie (optional)"),
     )),
     ("Cashflow", (
         ("operating_cash_flow", "Geldfluss aus Geschäftstätigkeit"),
@@ -34,6 +37,8 @@ FINANCIAL_INPUT_GROUPS = (
     ("Bilanz", (
         ("cash", "Flüssige Mittel"),
         ("gross_debt", "Finanzschulden"),
+        ("current_financial_debt", "Kurzfristige Finanzverbindlichkeiten (optional)"),
+        ("noncurrent_financial_debt", "Langfristige Finanzverbindlichkeiten (optional)"),
         ("reported_net_debt", "Ausgewiesene Nettoverschuldung (optional)"),
         ("inventory", "Vorräte"),
         ("receivables", "Forderungen aus Lieferungen und Leistungen"),
@@ -122,6 +127,11 @@ def create_financial_period(
                     f"Der Wert für {field_label} in {label} konnte nicht als Zahl "
                     f"interpretiert werden. {error}"
                 ) from error
+
+    if values["gross_debt"] is None:
+        values["gross_debt"] = calculate_gross_debt(
+            values["current_financial_debt"], values["noncurrent_financial_debt"],
+        )
 
     return FinancialPeriod(
         company_name=company_name, period_label=label, period_end=raw.period_end,

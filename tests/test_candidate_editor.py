@@ -68,20 +68,18 @@ def test_reset_restores_both_original_values_and_invalidates_current_confirmatio
     assert parser.call_count == 1
 
 
-def test_reset_restores_mapping_currency_and_scale_and_keeps_other_metric(original_ebitda_app):
+def test_reset_restores_mapping_uses_global_units_and_keeps_other_metric(original_ebitda_app):
     app, parser = original_ebitda_app
     _confirm(app, "revenue")
     revenue_confirmation = app.session_state["review_records"]["revenue"]
     app.selectbox(key="review_metric").select("ebitda").run()
     _editor_selectbox(app, "review_mapping_ebitda_").select("adjusted_ebitda").run()
-    _editor_selectbox(app, "review_unit_currency_ebitda_").select("EUR").run()
-    _editor_selectbox(app, "review_unit_scale_ebitda_").select("thousand").run()
+    assert not any(item.key.startswith("review_unit_currency_ebitda_") for item in app.selectbox)
+    assert not any(item.key.startswith("review_unit_scale_ebitda_") for item in app.selectbox)
     _values(app, "ebitda")[0].set_value("999").run()
     app.button(key="review_reset_metric").click().run()
     assert not app.exception
     assert _editor_selectbox(app, "review_mapping_ebitda_").value == "ebitda"
-    assert _editor_selectbox(app, "review_unit_currency_ebitda_").value == "CHF"
-    assert _editor_selectbox(app, "review_unit_scale_ebitda_").value == "million"
     assert [item.value for item in _values(app, "ebitda")] == ["761.8", "767.2"]
     assert app.session_state["review_records"]["revenue"] == revenue_confirmation
     assert app.text_input(key="company_name").value == ""

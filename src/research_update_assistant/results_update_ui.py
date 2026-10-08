@@ -27,10 +27,12 @@ _INPUT_LABELS = {
     "ebit": "EBIT", "adjusted_ebit": "Bereinigtes EBIT", "net_income": "Nettoergebnis",
     "operating_cash_flow": "Geldfluss aus Geschäftstätigkeit", "capex": "Investitionen (Capex)",
     "reported_free_cash_flow": "Ausgewiesener FCF", "cash": "Flüssige Mittel",
+    "current_financial_debt": "Kurzfristige Finanzverbindlichkeiten",
+    "noncurrent_financial_debt": "Langfristige Finanzverbindlichkeiten",
     "gross_debt": "Finanzverbindlichkeiten", "reported_net_debt": "Ausgewiesene Nettoverschuldung",
     "inventory": "Vorräte", "receivables": "Forderungen", "payables": "Verbindlichkeiten aus Lieferungen und Leistungen",
     "total_assets": "Bilanzsumme", "equity": "Eigenkapital",
-    "basic_eps": "Unverwässertes Ergebnis je Aktie", "diluted_eps": "Verwässertes Ergebnis je Aktie",
+    "basic_eps": "Ergebnis je Aktie (EPS)", "diluted_eps": "Verwässertes Ergebnis je Aktie",
 }
 _DERIVED_METRICS = (
     "ebit_margin", "calculated_free_cash_flow", "calculated_net_debt",
@@ -42,7 +44,7 @@ _EXPECTATION_LABELS = {
     "ebit": "EBIT",
     "ebit_margin": "EBIT-Marge",
     "net_income": "Nettoergebnis",
-    "basic_eps": "Unverwässertes EPS",
+    "basic_eps": "Ergebnis je Aktie (EPS)",
     "diluted_eps": "Verwässertes EPS",
     "operating_cash_flow": "Operativer Cashflow",
     "reported_free_cash_flow": "Ausgewiesener FCF",

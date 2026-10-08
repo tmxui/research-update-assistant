@@ -27,9 +27,9 @@ metrics:
     statement_type: income_statement
     synonyms: [Nettoergebnis, Reingewinn, Konzerngewinn, Jahresgewinn, Jahresüberschuss, Ergebnis nach Steuern, Net Income, Net Profit]
   basic_eps:
-    display_name_de: Unverwässertes Ergebnis je Aktie
+    display_name_de: Ergebnis je Aktie (EPS)
     statement_type: income_statement
-    synonyms: [Unverwässertes Ergebnis je Aktie, Unverwässerter Gewinn je Aktie, Basic EPS, Basic Earnings per Share, Earnings per Share (basic), Ergebnis je Aktie (unverwässert)]
+    synonyms: [Ergebnis je Aktie, Gewinn je Aktie, EPS, Earnings per Share, Basic EPS, Basic Earnings per Share, Unverwässertes Ergebnis je Aktie, Unverwässerter Gewinn je Aktie, Earnings per Share (basic), Ergebnis je Aktie (unverwässert)]
   diluted_eps:
     display_name_de: Verwässertes Ergebnis je Aktie
     statement_type: income_statement
@@ -54,6 +54,14 @@ metrics:
     display_name_de: Finanzverbindlichkeiten
     statement_type: balance_sheet
     synonyms: [Finanzverbindlichkeiten, Finanzschulden, verzinsliche Verbindlichkeiten, zinstragende Verbindlichkeiten, Borrowings, Financial Debt]
+  current_financial_debt:
+    display_name_de: Kurzfristige Finanzverbindlichkeiten
+    statement_type: balance_sheet
+    synonyms: [Kurzfristige Finanzverbindlichkeiten, Kurzfristige Finanzschulden, Current Financial Liabilities, Current Borrowings]
+  noncurrent_financial_debt:
+    display_name_de: Langfristige Finanzverbindlichkeiten
+    statement_type: balance_sheet
+    synonyms: [Langfristige Finanzverbindlichkeiten, Langfristige Finanzschulden, Non-current Financial Liabilities, Non-current Borrowings, Noncurrent Financial Liabilities, Noncurrent Borrowings]
   reported_net_debt:
     display_name_de: Ausgewiesene Nettoverschuldung
     statement_type: balance_sheet

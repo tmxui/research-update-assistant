@@ -1,5 +1,6 @@
 """Einzelprüfung von PDF-Vorschlägen, ohne Finanzformeln in der Oberfläche."""
 
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
@@ -12,8 +13,9 @@ from .history import FinancialHistory
 from .input_parsing import CURRENCIES, SCALE_OPTIONS
 from .metric_mapping import MetricConfig
 from .validation import (
-    ConfirmedMetricObservation, ConfirmedPeriodMetadata, CandidateValidationError,
-    confirm_candidate, confirm_manual_metric, create_confirmed_history,
+    EPS_METRICS, ConfirmedMetricObservation, ConfirmedPeriodMetadata,
+    CandidateValidationError, confirm_candidate, confirm_manual_metric,
+    create_confirmed_history, derive_gross_debt_observations,
 )
 
 AcceptHistory = Callable[[FinancialHistory, tuple[ConfirmedMetricObservation, ...]], None]
@@ -67,17 +69,10 @@ def _invalidate_metric(metric: str) -> None:
     _invalidate_pdf_analysis()
 
 
-def _invalidate_all(reset_values: bool = False) -> None:
-    for metric in st.session_state["review_records"]:
-        _archive_confirmation(metric)
-    st.session_state["review_records"] = {}
+def _metadata_changed() -> None:
+    """Metadaten neu prüfen, ohne bestätigte Kennzahlen zu verwerfen."""
     st.session_state["review_metadata_confirmed"] = False
     _invalidate_pdf_analysis()
-    # Periodenlabels können geändert worden sein: Wertfelder erneut vorbereiten.
-    if reset_values:
-        for key in list(st.session_state):
-            if key.startswith("review_value_") or key.startswith("review_assignment_"):
-                del st.session_state[key]
 
 
 def _reset_editor(
@@ -120,20 +115,46 @@ def _period_suggestions(candidates: tuple[FinancialMetricCandidate, ...]) -> tup
     return tuple(suggestions[-2:])
 
 
+def _suggest_global_units(
+    candidates: tuple[FinancialMetricCandidate, ...],
+) -> tuple[str | None, str | None]:
+    """Nutze ein eindeutiges dominantes Currency/Scale-Paar als Vorschlag."""
+    pairs = Counter(
+        (candidate.currency, candidate.scale)
+        for candidate in candidates
+        if candidate.canonical_metric not in EPS_METRICS
+        and not candidate.is_segment
+        and candidate.currency in CURRENCIES
+        and candidate.scale in dict(SCALE_OPTIONS)
+    )
+    if not pairs:
+        return None, None
+    ranked = pairs.most_common(2)
+    if len(ranked) == 1 or ranked[0][1] > ranked[1][1]:
+        return ranked[0][0]
+    return None, None
+
+
 def _render_metadata(candidates: tuple[FinancialMetricCandidate, ...]) -> tuple:
     st.subheader("Unternehmen und Vergleichsperioden prüfen")
     st.caption("Zwei Jahres- oder zwei Halbjahresperioden auswählen. Unbekannte Angaben bleiben offen; bitte ergänzen.")
-    company = st.text_input("Unternehmen für PDF-Analyse", key="review_company", on_change=_invalidate_all)
-    currencies = {c.currency for c in candidates if c.currency}
-    scales = {c.scale for c in candidates if c.scale and c.canonical_metric not in ("basic_eps", "diluted_eps")}
-    st.session_state.setdefault("review_currency", next(iter(currencies)) if len(currencies) == 1 else None)
-    st.session_state.setdefault("review_scale", next(iter(scales)) if len(scales) == 1 else None)
+    company = st.text_input(
+        "Unternehmen für PDF-Analyse", key="review_company", on_change=_metadata_changed,
+    )
+    suggested_currency, suggested_scale = _suggest_global_units(candidates)
+    st.session_state.setdefault("review_currency", suggested_currency)
+    st.session_state.setdefault("review_scale", suggested_scale)
     left, right = st.columns(2)
     with left:
-        currency = st.selectbox("Währung der Analyse", CURRENCIES, key="review_currency", index=None, on_change=_invalidate_all)
+        currency = st.selectbox(
+            "Währung der Analyse", CURRENCIES, key="review_currency", index=None,
+            on_change=_metadata_changed,
+        )
     with right:
-        scale = st.selectbox("Einheit der Analyse", tuple(dict(SCALE_OPTIONS)), key="review_scale", index=None,
-                             format_func=lambda x: dict(SCALE_OPTIONS)[x], on_change=_invalidate_all)
+        scale = st.selectbox(
+            "Einheit der Analyse", tuple(dict(SCALE_OPTIONS)), key="review_scale", index=None,
+            format_func=lambda x: dict(SCALE_OPTIONS)[x], on_change=_metadata_changed,
+        )
     suggestions = _period_suggestions(candidates)
     metadata = []
     for index, column in enumerate(st.columns(2)):
@@ -143,13 +164,34 @@ def _render_metadata(candidates: tuple[FinancialMetricCandidate, ...]) -> tuple:
             st.session_state.setdefault(prefix + "label", label)
             st.session_state.setdefault(prefix + "end", end)
             st.session_state.setdefault(prefix + "months", months)
-            st.text_input(f"Periodenbezeichnung {index + 1}", key=prefix + "label", on_change=_invalidate_all, args=(True,))
-            st.date_input(f"Stichtag {index + 1}", key=prefix + "end", value=None, format="DD.MM.YYYY", on_change=_invalidate_all)
+            st.text_input(
+                f"Periodenbezeichnung {index + 1}", key=prefix + "label",
+                on_change=_metadata_changed,
+            )
+            st.date_input(
+                f"Stichtag {index + 1}", key=prefix + "end", value=None,
+                format="DD.MM.YYYY", on_change=_metadata_changed,
+            )
             st.number_input(f"Monate {index + 1}", key=prefix + "months", value=None, min_value=1, max_value=12, step=1,
-                            on_change=_invalidate_all)
+                            on_change=_metadata_changed)
             metadata.append(_PeriodDraft(
                 st.session_state[prefix + "label"], st.session_state[prefix + "end"], st.session_state[prefix + "months"],
             ))
+    missing = []
+    if not company.strip():
+        missing.append("Unternehmen")
+    if currency is None:
+        missing.append("Währung")
+    if scale is None:
+        missing.append("Einheit")
+    if any(not item.period_label.strip() or item.period_end is None or item.period_months is None
+           for item in metadata):
+        missing.append("vollständige Periodenangaben")
+    if missing:
+        st.warning(
+            "Für die Analyse noch erforderlich: " + ", ".join(missing) + ". "
+            "Bereits bestätigte Kennzahlen bleiben bei Ergänzungen erhalten."
+        )
     return company, currency, scale, tuple(metadata)
 
 
@@ -162,12 +204,14 @@ def _render_source(candidate: FinancialMetricCandidate, select_page: Callable[[i
         f"Erkannte Einheit: {candidate.currency or 'unbekannt'} / {candidate.scale or 'unbekannt'}\n"
         f"Zuordnung: {_CONFIDENCE[candidate.confidence]}"
     )
-    for reason in candidate.confidence_reasons:
-        st.caption(reason)
-    st.text(candidate.source_snippet)
-    st.caption("Rohwerte: " + " · ".join(
-        f"{v.column_header or 'ohne Header'}: {v.raw_value}" for v in candidate.values
-    ))
+    with st.expander("Warum diese Quelle?"):
+        for reason in candidate.confidence_reasons:
+            st.caption(reason)
+    with st.expander("Extraktionsdetails"):
+        st.text(candidate.source_snippet)
+        st.caption("Rohwerte: " + " · ".join(
+            f"{v.column_header or 'ohne Header'}: {v.raw_value}" for v in candidate.values
+        ))
     st.button(f"Quelle auf Seite {candidate.page_number} prüfen", key="review_show_source",
               on_click=select_page, args=(candidate.page_number,))
     if candidate.is_segment:
@@ -231,21 +275,51 @@ def _render_metric_editor(config: MetricConfig, candidates: tuple[FinancialMetri
     canonical = st.selectbox("Kennzahl-Zuordnung", tuple(names), index=tuple(names).index(metric),
                              format_func=names.get, key=f"review_mapping_{metric}_{source_id}", persist_state="session",
                              on_change=_invalidate_metric, args=(metric,))
-    left, right = st.columns(2)
     ckey, skey = f"review_unit_currency_{metric}_{source_id}", f"review_unit_scale_{metric}_{source_id}"
-    st.session_state.setdefault(ckey, candidate.currency if candidate else currency)
-    st.session_state.setdefault(skey, candidate.scale if candidate else scale)
-    with left:
-        selected_currency = st.selectbox("Währung dieser Werte", CURRENCIES, key=ckey, index=None, persist_state="session",
-                                         on_change=_invalidate_metric, args=(metric,))
-    with right:
-        selected_scale = st.selectbox("Einheit dieser Werte", tuple(dict(SCALE_OPTIONS)), key=skey, index=None,
-                                     format_func=lambda x: dict(SCALE_OPTIONS)[x], persist_state="session",
-                                     on_change=_invalidate_metric, args=(metric,))
-    if canonical in ("basic_eps", "diluted_eps"):
-        st.caption("EPS ist ein Betrag je Aktie in Währungseinheiten, unabhängig von der Skalierung der übrigen Beträge.")
-    elif selected_currency != currency or selected_scale != scale:
-        st.caption("Die Einheit dieser Werte weicht von der Analyse ab oder ist noch offen. Bitte Werte und Einheit prüfen; es erfolgt keine Umrechnung.")
+    is_eps = canonical in EPS_METRICS
+    unit_mismatch = bool(candidate and (
+        candidate.currency != currency
+        or (not is_eps and candidate.scale != scale)
+    ))
+    if is_eps or unit_mismatch:
+        st.session_state.setdefault(
+            ckey, candidate.currency if candidate and candidate.currency in CURRENCIES else currency,
+        )
+        st.session_state.setdefault(
+            skey,
+            "unit" if is_eps else (
+                candidate.scale if candidate and candidate.scale in dict(SCALE_OPTIONS) else scale
+            ),
+        )
+        if unit_mismatch:
+            st.warning(
+                "Die erkannte oder fehlende Einheit weicht von den globalen "
+                "Analyse-Metadaten ab. Prüfe den Override; es erfolgt keine Umrechnung."
+            )
+        with st.expander("Erweiterte Einheitseinstellungen"):
+            selected_currency = st.selectbox(
+                "Währung dieser Werte", CURRENCIES, key=ckey, index=None,
+                persist_state="session", on_change=_invalidate_metric, args=(metric,),
+            )
+            if is_eps:
+                selected_scale = "unit"
+                st.caption(
+                    "EPS ist ein Währungsbetrag je Aktie; die Skalierung der übrigen "
+                    "Finanzwerte gilt dafür nicht."
+                )
+            else:
+                selected_scale = st.selectbox(
+                    "Einheit dieser Werte", tuple(dict(SCALE_OPTIONS)), key=skey,
+                    index=None, format_func=lambda x: dict(SCALE_OPTIONS)[x],
+                    persist_state="session", on_change=_invalidate_metric, args=(metric,),
+                )
+    else:
+        selected_currency, selected_scale = currency, scale
+        if candidate:
+            st.caption(
+                f"Einheit aus den Analyse-Metadaten übernommen: {currency} / "
+                f"{dict(SCALE_OPTIONS).get(scale, scale)}."
+            )
     values, assignments = _render_values(metric, source_id, candidate, periods)
     with st.container(border=True, key="review_metric_actions"):
         st.caption("Aktionen für die gesamte Kennzahl (beide Perioden)")
@@ -285,11 +359,19 @@ def render_validation_section(config: MetricConfig, candidates: tuple[FinancialM
     company, currency, scale, periods = _render_metadata(candidates)
     _render_metric_editor(config, candidates, periods, currency, scale, select_page)
     records = st.session_state["review_records"]
+    confirmed_observations = tuple(o for _, items in records.values() for o in items)
+    enriched_observations = derive_gross_debt_observations(confirmed_observations)
+    derived_gross_debt = any(
+        item.canonical_metric == "gross_debt" and item.extraction_method == "derived"
+        for item in enriched_observations
+    )
     summary = []
     names = {m.canonical_metric: m.display_name_de for m in config.metrics}
     for metric in config.metrics:
         proposed = any(c.canonical_metric == metric.canonical_metric for c in candidates)
         status, observations = records.get(metric.canonical_metric, ("Vorgeschlagen" if proposed else "Fehlend", ()))
+        if metric.canonical_metric == "gross_debt" and not observations and derived_gross_debt:
+            status = "Aus Komponenten abgeleitet"
         summary.append({
             "Kennzahl": metric.display_name_de, "Status": status,
             "Bestätigte Zuordnung": names[observations[0].canonical_metric] if observations else "–",
@@ -302,7 +384,9 @@ def render_validation_section(config: MetricConfig, candidates: tuple[FinancialM
         if not approved:
             st.error("Bitte zuerst Unternehmen, Perioden und Einheiten bestätigen.")
             return
-        observations = tuple(o for _, items in records.values() for o in items)
+        observations = derive_gross_debt_observations(
+            tuple(o for _, items in records.values() for o in items)
+        )
         try:
             if not observations:
                 raise CandidateValidationError("Bitte mindestens eine Kennzahl bestätigen.")

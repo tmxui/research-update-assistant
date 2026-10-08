@@ -23,7 +23,7 @@ _INPUT_FIELDS = (
     ("ebit", "EBIT"),
     ("ebit_margin", "EBIT-Marge in %"),
     ("net_income", "Nettoergebnis"),
-    ("basic_eps", "Unverwässertes EPS"),
+    ("basic_eps", "Ergebnis je Aktie (EPS)"),
     ("diluted_eps", "Verwässertes EPS"),
     ("operating_cash_flow", "Geldfluss aus Geschäftstätigkeit"),
     ("reported_free_cash_flow", "Ausgewiesener Free Cashflow"),

@@ -68,6 +68,23 @@ def test_every_financial_input_is_transferred(manual_period: ManualPeriodInput) 
     assert period.scale == "billion"
 
 
+def test_manual_debt_components_derive_gross_debt_only_when_both_exist(manual_period):
+    complete = replace(manual_period, values={
+        "current_financial_debt": "40",
+        "noncurrent_financial_debt": "320",
+    })
+    period = create_financial_period("Example AG", "CHF", "million", complete)
+    assert period.current_financial_debt == 40
+    assert period.noncurrent_financial_debt == 320
+    assert period.gross_debt == 360
+
+    incomplete = replace(manual_period, values={"current_financial_debt": "40"})
+    period = create_financial_period("Example AG", "CHF", "million", incomplete)
+    assert period.current_financial_debt == 40
+    assert period.noncurrent_financial_debt is None
+    assert period.gross_debt is None
+
+
 def test_invalid_number_error_identifies_field_and_period(manual_period: ManualPeriodInput) -> None:
     raw = replace(manual_period, values={"ebit": "keine Zahl"})
     with pytest.raises(InputValidationError, match="EBIT in FY2025"):
